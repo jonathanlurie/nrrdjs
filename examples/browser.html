@@ -1,0 +1,39 @@
+<html>
+<head>
+  <title>Test</title>
+</head>
+<body>
+  <!-- importing the automatically build module -->
+  <script src="../dist/nrrdjs.js"></script>
+
+  <!-- The minified version is also accessible -->
+  <!-- <script src="../dist/edfdecoder.umd.min.js"></script> -->
+  Open NRRD file <input type="file" id="fileInput">
+  <p>Open Javascript console.</p>
+
+  <script>
+    console.log(nrrdjs)
+    let fileInput = document.getElementById('fileInput')
+
+
+    // event listener of the file dialog, it then triggers the file decoding
+    fileInput.addEventListener('change', function(e) {
+      let files = e.target.files
+      let reader = new FileReader()
+      if( !files.length ){
+        return
+      }
+      reader.onloadend = function(event) {
+        let buffer = event.target.result
+        readFile(buffer)
+      }
+      reader.readAsArrayBuffer( files[0] )
+  	})
+
+    function readFile( buff ){
+      nrrdjs.parse(buff, {})
+    }
+  </script>
+
+</body>
+</html>

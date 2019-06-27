@@ -56,5 +56,8 @@
         "warn"
       ]
     }
+  },
+  "dependencies": {
+    "pako": "^1.0.10"
   }
 }

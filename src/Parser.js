@@ -1,3 +1,4 @@
+import pako from 'pako'
 import { NRRD_TYPES_TO_TYPEDARRAY, BUFFER_READ_METHODS } from './constants'
 
 
@@ -23,6 +24,7 @@ export default function parse(nrrdBuffer, options){
     return header
   }
 
+  console.log(pako)
   console.log(dataByteOffset)
 
 
@@ -46,8 +48,11 @@ function parseHeader(nrrdBuffer){
     }
   }
 
-  let headerLines = byteArrayHeader.join('').trim().split('\n').map(l => l.trim())
+  if(dataStartPosition === null){
+    throw new Error('The NRRD header is corrupted.')
+  }
 
+  let headerLines = byteArrayHeader.join('').trim().split('\n').map(l => l.trim())
 
   let preMap = headerLines.slice(1)
   .filter( s => { // removing empty lines
@@ -110,4 +115,9 @@ function parseHeader(nrrdBuffer){
     header: nrrdHeader,
     dataByteOffset: dataStartPosition
   }
+}
+
+
+function parseData(nrrdBuffer, header, dataByteOffset){
+  let dataBuffer = null
 }

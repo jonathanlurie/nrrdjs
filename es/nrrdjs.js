@@ -1,3 +1,5 @@
+import pako from 'pako';
+
 /**
  * This is the mapping from the NRRD datatype as written in the NRRD header
  * to the JS typed array equivalent.
@@ -25,6 +27,7 @@ function parse(nrrdBuffer, options){
     return header
   }
 
+  console.log(pako);
   console.log(dataByteOffset);
 
 
@@ -48,8 +51,11 @@ function parseHeader(nrrdBuffer){
     }
   }
 
-  let headerLines = byteArrayHeader.join('').trim().split('\n').map(l => l.trim());
+  if(dataStartPosition === null){
+    throw new Error('The NRRD header is corrupted.')
+  }
 
+  let headerLines = byteArrayHeader.join('').trim().split('\n').map(l => l.trim());
 
   let preMap = headerLines.slice(1)
   .filter( s => { // removing empty lines

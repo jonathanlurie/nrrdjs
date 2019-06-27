@@ -1,5 +1,5 @@
 import pako from 'pako'
-import { NRRD_TYPES_TO_TYPEDARRAY, BUFFER_READ_METHODS } from './constants'
+import { NRRD_TYPES_TO_TYPEDARRAY, NRRD_TYPES_TO_VIEW_GET } from './constants'
 
 
 /**
@@ -21,13 +21,11 @@ export default function parse(nrrdBuffer, options){
   let {header, dataByteOffset} = parseHeader(nrrdBuffer)
 
   if('headerOnly' in options && options.headerOnly ){
-    return header
+    return {header: header, data: null}
   }
 
-  console.log(pako)
-  console.log(dataByteOffset)
-
-
+  let data = parseData(nrrdBuffer, header, dataByteOffset)
+  return {header: header, data: data}
 }
 
 
@@ -120,4 +118,43 @@ function parseHeader(nrrdBuffer){
 
 function parseData(nrrdBuffer, header, dataByteOffset){
   let dataBuffer = null
+
+  console.log(header)
+  console.log(dataByteOffset)
+
+  if(header.encoding === 'raw'){
+    dataBuffer = nrrdBuffer
+  } else if(header.encoding === 'gzip' || header.encoding === 'gz'){
+    dataBuffer = pako.inflate(new Uint8Array(nrrdBuffer).slice(dataByteOffset)).buffer
+  } else {
+    throw new Error('Only "raw" and "gzip" encoding are supported.')
+  }
+
+  let arrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type]
+  let nbElementsFromHeader = header.sizes.reduce((prev, curr) => prev * curr)
+  let nbElementsFromBufferAndType = dataBuffer.byteLength / arrayType.BYTES_PER_ELEMENT
+
+  if(nbElementsFromHeader !== nbElementsFromBufferAndType){
+    throw new Error('Unconsistency in data buffer length')
+  }
+
+  let data = new arrayType(nbElementsFromHeader)
+  let dataView = new DataView(dataBuffer)
+  let viewMethod = NRRD_TYPES_TO_VIEW_GET[header.type]
+  let littleEndian = header.endian === 'little' ? true : false
+  let min = +Infinity
+  let max = -Infinity
+
+
+  for(let i=0; i<nbElementsFromHeader; i++){
+    data[i] = dataView[viewMethod](i * arrayType.BYTES_PER_ELEMENT, littleEndian)
+    min = Math.min(min, data[a])
+    max = Math.max(max, data[a])
+  }
+
+  console.log(data)
+  return data
 }
+
+// TODO: find a way to know the nb of componenents per voxel.
+// We could use the presence of "none" in the prop "space direction" and the prop sizes

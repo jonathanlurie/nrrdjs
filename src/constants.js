@@ -46,175 +46,52 @@ const NRRD_TYPES_TO_TYPEDARRAY = {
 }
 
 
-/**
- * This is the mapping from the NRRD datatype as written in the NRRD header
- * to the JS DataView binary reading methods.
- */
-const BUFFER_READ_METHODS = {
-  "signed char": {
-    "little": 'readInt8',
-    "big": 'readInt8'
-  },
-  "int8": {
-    "little": 'readInt8',
-    "big": 'readInt8'
-  },
-  "int8_t": {
-    "little": 'readInt8',
-    "big": 'readInt8'
-  },
-  "uchar": {
-    "little": 'readUInt8',
-    "big": 'readUInt8'
-  },
-  "unsigned char": {
-    "little": 'readUInt8',
-    "big": 'readUInt8'
-  },
-  "uint8": {
-    "little": 'readUInt8',
-    "big": 'readUInt8'
-  },
-  "uint8_t": {
-    "little": 'readUInt8',
-    "big": 'readUInt8'
-  },
-  "short": {
-    "little": 'readInt16LE',
-    "big": 'readInt16BE'
-  },
-  "short int": {
-    "little": 'readInt16LE',
-    "big": 'readInt16BE'
-  },
-  "signed short": {
-    "little": 'readInt16LE',
-    "big": 'readInt16BE'
-  },
-  "signed short int": {
-    "little": 'readInt16LE',
-    "big": 'readInt16BE'
-  },
-  "int16": {
-    "little": 'readInt16LE',
-    "big": 'readInt16BE'
-  },
-  "int16_t": {
-    "little": 'readInt16LE',
-    "big": 'readInt16BE'
-  },
-  "ushort": {
-    "little": 'readUInt16LE',
-    "big": 'readUInt16BE'
-  },
-  "unsigned short": {
-    "little": 'readUInt16LE',
-    "big": 'readUInt16BE'
-  },
-  "unsigned short int": {
-    "little": 'readUInt16LE',
-    "big": 'readUInt16BE'
-  },
-  "uint16": {
-    "little": 'readUInt16LE',
-    "big": 'readUInt16BE'
-  },
-  "uint16_t": {
-    "little": 'readUInt16LE',
-    "big": 'readUInt16BE'
-  },
-  "int": {
-    "little": 'readInt32LE',
-    "big": 'readInt32BE'
-  },
-  "signed int": {
-    "little": 'readInt32LE',
-    "big": 'readInt32BE'
-  },
-  "int32": {
-    "little": 'readInt32LE',
-    "big": 'readInt32BE'
-  },
-  "int32_t": {
-    "little": 'readInt32LE',
-    "big": 'readInt32BE'
-  },
-  "uint": {
-    "little": 'readUInt32LE',
-    "big": 'readUInt32BE'
-  },
-  "unsigned int": {
-    "little": 'readUInt32LE',
-    "big": 'readUInt32BE'
-  },
-  "uint32": {
-    "little": 'readUInt32LE',
-    "big": 'readUInt32BE'
-  },
-  "uint32_t": {
-    "little": 'readUInt32LE',
-    "big": 'readUInt32BE'
-  },
-  "longlong": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },           // OK for Node/V8/Chrome but not Firefox
-  "long long": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },
-  "long long int": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },
-  "signed long long": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },
-  "signed long long int": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },
-  "int64": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },
-  "int64_t": {
-    "little": 'readBigInt64LE',
-    "big": 'readBigInt64BE'
-  },
-  "ulonglong": {
-    "little": 'readBigUInt64LE',
-    "big": 'readBigUInt64BE'
-  },
-  "unsigned long long": {
-    "little": 'readBigUInt64LE',
-    "big": 'readBigUInt64BE'
-  },
-  "unsigned long long int": {
-    "little": 'readBigUInt64LE',
-    "big": 'readBigUInt64BE'
-  },
-  "uint64": {
-    "little": 'readBigUInt64LE',
-    "big": 'readBigUInt64BE'
-  },
-  "uint64_t": {
-    "little": 'readBigUInt64LE',
-    "big": 'readBigUInt64BE'
-  },
-  "float": {
-    "little": 'readFloatLE',
-    "big": 'readFloatBE'
-  },
-  "double": {
-    "little": 'readDoubleLE',
-    "big": 'readDoubleBE'
-  }
+
+const NRRD_TYPES_TO_VIEW_GET = {
+  "signed char": 'getInt8',
+  "int8": 'getInt8',
+  "int8_t": 'getInt8',
+  "uchar": 'getUint8',
+  "unsigned char": 'getUint8',
+  "uint8": 'getUint8',
+  "uint8_t": 'getUint8',
+  "short": 'getInt16',
+  "short int": 'getInt16',
+  "signed short": 'getInt16',
+  "signed short int": 'getInt16',
+  "int16": 'getInt16',
+  "int16_t": 'getInt16',
+  "ushort": 'getUint16',
+  "unsigned short": 'getUint16',
+  "unsigned short int": 'getUint16',
+  "uint16": 'getUint16',
+  "uint16_t": 'getUint16',
+  "int": 'getInt32',
+  "signed int": 'getInt32',
+  "int32": 'getInt32',
+  "int32_t": 'getInt32',
+  "uint": 'getUint32',
+  "unsigned int": 'getUint32',
+  "uint32": 'getUint32',
+  "uint32_t": 'getUint32',
+  "longlong": null,
+  "long long": null,
+  "long long int": null,
+  "signed long long": null,
+  "signed long long int": null,
+  "int64": null,
+  "int64_t": null,
+  "ulonglong": null,
+  "unsigned long long": null,
+  "unsigned long long int": null,
+  "uint64": null,
+  "uint64_t": null,
+  "float": 'getFloat32',
+  "double": 'getFloat64'
 }
 
 
 export {
   NRRD_TYPES_TO_TYPEDARRAY,
-  BUFFER_READ_METHODS
+  NRRD_TYPES_TO_VIEW_GET
 }

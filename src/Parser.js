@@ -78,6 +78,10 @@ function parseHeader(nrrdBuffer){
     nrrdHeader['sizes'] = nrrdHeader.sizes.split(' ').map( n => parseInt(n))
   }
 
+  if(nrrdHeader['dimension']){
+    nrrdHeader['dimension'] = parseInt(nrrdHeader['dimension'])
+  }
+
   if(nrrdHeader['space directions']){
     nrrdHeader['space directions'] = nrrdHeader['space directions'].split(' ')
         .map(triple => {
@@ -88,11 +92,13 @@ function parseHeader(nrrdBuffer){
                        .split(',')
                        .map(n => parseFloat(n))
         })
+
+    if(nrrdHeader['space directions'].length !== nrrdHeader['dimension']){
+      throw new Error('"space direction" property has to contain as many elements as dimensions. Non-spatial dimesnsions must be refered as "none". See http://teem.sourceforge.net/nrrd/format.html#spacedirections for more info.')
+    }
+
   }
 
-  if(nrrdHeader['dimension']){
-    nrrdHeader['dimension'] = parseInt(nrrdHeader['dimension'])
-  }
 
   if(nrrdHeader['space origin']){
     nrrdHeader['space origin'] = nrrdHeader['space origin']
@@ -108,6 +114,9 @@ function parseHeader(nrrdBuffer){
   if(nrrdHeader['space dimension']){
     nrrdHeader['space dimension'] = parseInt(nrrdHeader['space dimension'])
   }
+
+  // some additional metadata that are not part of the header will be added here
+  nrrdHeader.extra = {}
 
   return {
     header: nrrdHeader,
@@ -148,9 +157,12 @@ function parseData(nrrdBuffer, header, dataByteOffset){
 
   for(let i=0; i<nbElementsFromHeader; i++){
     data[i] = dataView[viewMethod](i * arrayType.BYTES_PER_ELEMENT, littleEndian)
-    min = Math.min(min, data[a])
-    max = Math.max(max, data[a])
+    min = Math.min(min, data[i])
+    max = Math.max(max, data[i])
   }
+
+  header.extra.min = min
+  header.extra.max = max
 
   console.log(data)
   return data

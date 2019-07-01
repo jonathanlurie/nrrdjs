@@ -92,6 +92,28 @@ const NRRD_TYPES_TO_VIEW_GET = {
   "double": 'getFloat64'
 };
 
+
+const SPACE_TO_SPACEDIMENSIONS = {
+  'right-anterior-superior': 3,
+  'ras': 3,
+  'left-anterior-superior': 3,
+  'las': 3,
+  'left-posterior-superior': 3,
+  'lps': 3,
+  'right-anterior-superior-time': 4,
+  'rast': 4,
+  'left-anterior-superior-time': 4,
+  'last': 4,
+  'left-posterior-superior-time': 4,
+  'lpst': 4,
+  'scanner-xyz': 3,
+  'scanner-xyz-time': 4,
+  '3d-right-handed': 3,
+  '3d-left-handed': 3,
+  '3d-right-handed-time': 4,
+  '3d-left-handed-time': 4
+};
+
 /**
  * Parse a buffer of a NRRD file.
  * Throws an exception if the file is not a proper NRRD file.
@@ -162,10 +184,17 @@ function parseHeader(nrrdBuffer){
     nrrdHeader[field.key] = field.val;
   });
 
-
   // parsing each fields of the header
   if(nrrdHeader['sizes']){
     nrrdHeader['sizes'] = nrrdHeader.sizes.split(' ').map( n => parseInt(n));
+  }
+
+  if(nrrdHeader['space dimension']){
+    nrrdHeader['space dimension'] = parseInt(nrrdHeader['space dimension']);
+  }
+
+  if(nrrdHeader['space']){
+    nrrdHeader['space dimension'] = SPACE_TO_SPACEDIMENSIONS[nrrdHeader['space'].toLowerCase()];
   }
 
   if(nrrdHeader['dimension']){
@@ -201,9 +230,7 @@ function parseHeader(nrrdBuffer){
     nrrdHeader['kinds'] = nrrdHeader['kinds'].split(' ');
   }
 
-  if(nrrdHeader['space dimension']){
-    nrrdHeader['space dimension'] = parseInt(nrrdHeader['space dimension']);
-  }
+
 
   // some additional metadata that are not part of the header will be added here
   nrrdHeader.extra = {};

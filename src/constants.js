@@ -91,7 +91,29 @@ const NRRD_TYPES_TO_VIEW_GET = {
 }
 
 
+const SPACE_TO_SPACEDIMENSIONS = {
+  'right-anterior-superior': 3,
+  'ras': 3,
+  'left-anterior-superior': 3,
+  'las': 3,
+  'left-posterior-superior': 3,
+  'lps': 3,
+  'right-anterior-superior-time': 4,
+  'rast': 4,
+  'left-anterior-superior-time': 4,
+  'last': 4,
+  'left-posterior-superior-time': 4,
+  'lpst': 4,
+  'scanner-xyz': 3,
+  'scanner-xyz-time': 4,
+  '3d-right-handed': 3,
+  '3d-left-handed': 3,
+  '3d-right-handed-time': 4,
+  '3d-left-handed-time': 4
+}
+
 export {
   NRRD_TYPES_TO_TYPEDARRAY,
-  NRRD_TYPES_TO_VIEW_GET
+  NRRD_TYPES_TO_VIEW_GET,
+  SPACE_TO_SPACEDIMENSIONS
 }

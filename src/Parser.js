@@ -1,5 +1,5 @@
 import pako from 'pako'
-import { NRRD_TYPES_TO_TYPEDARRAY, NRRD_TYPES_TO_VIEW_GET } from './constants'
+import { NRRD_TYPES_TO_TYPEDARRAY, NRRD_TYPES_TO_VIEW_GET, SPACE_TO_SPACEDIMENSIONS } from './constants'
 
 
 /**
@@ -72,10 +72,17 @@ function parseHeader(nrrdBuffer){
     nrrdHeader[field.key] = field.val
   })
 
-
   // parsing each fields of the header
   if(nrrdHeader['sizes']){
     nrrdHeader['sizes'] = nrrdHeader.sizes.split(' ').map( n => parseInt(n))
+  }
+
+  if(nrrdHeader['space dimension']){
+    nrrdHeader['space dimension'] = parseInt(nrrdHeader['space dimension'])
+  }
+
+  if(nrrdHeader['space']){
+    nrrdHeader['space dimension'] = SPACE_TO_SPACEDIMENSIONS[nrrdHeader['space'].toLowerCase()]
   }
 
   if(nrrdHeader['dimension']){
@@ -111,9 +118,7 @@ function parseHeader(nrrdBuffer){
     nrrdHeader['kinds'] = nrrdHeader['kinds'].split(' ')
   }
 
-  if(nrrdHeader['space dimension']){
-    nrrdHeader['space dimension'] = parseInt(nrrdHeader['space dimension'])
-  }
+
 
   // some additional metadata that are not part of the header will be added here
   nrrdHeader.extra = {}

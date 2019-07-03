@@ -46,8 +46,10 @@
 
 
     function displayNrrdSlice(sliceIndex){
-      let slice = nrrdjs.Toolbox.getNativeSlice(myNrrd.data, myNrrd.header, sliceIndex, {uint8: false})
-
+      console.time('getSliceXY')
+      let slice = nrrdjs.Toolbox.getSliceXY(myNrrd.data, myNrrd.header, sliceIndex, {uint8: false})
+      console.timeEnd('getSliceXY')
+      
       let canvas = document.getElementById('nrrdSliceDisplay')
       canvas.width = myNrrd.header.sizes[0]
       canvas.height = myNrrd.header.sizes[1]

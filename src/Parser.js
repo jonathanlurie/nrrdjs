@@ -118,10 +118,14 @@ function parseHeader(nrrdBuffer){
     nrrdHeader['kinds'] = nrrdHeader['kinds'].split(' ')
   }
 
-
-
   // some additional metadata that are not part of the header will be added here
   nrrdHeader.extra = {}
+
+  // having the stride can be handy.
+  nrrdHeader.extra.stride = [1]
+  for(let i=1; i<nrrdHeader.sizes.length; i++){
+    nrrdHeader.extra.stride.push(nrrdHeader.extra.stride[i-1] * nrrdHeader.sizes[i-1])
+  }
 
   return {
     header: nrrdHeader,

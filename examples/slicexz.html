@@ -51,8 +51,8 @@
       console.timeEnd('getSliceXZ')
 
       let canvas = document.getElementById('nrrdSliceDisplay')
-      canvas.width = myNrrd.header.sizes[0]
-      canvas.height = myNrrd.header.sizes[2]
+      canvas.width = slice.width
+      canvas.height = slice.height
       let ctx = canvas.getContext('2d')
 
       let canvasImageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -60,8 +60,8 @@
 
       let span = myNrrd.header.extra.max - myNrrd.header.extra.min
 
-      for(let i=0; i<slice.length; i++){
-        let value = ((slice[i] - myNrrd.header.extra.min) / span ) * 255
+      for(let i=0; i<slice.data.length; i++){
+        let value = ((slice.data[i] - myNrrd.header.extra.min) / span ) * 255
         let index1D = i*4
         canvasImageDataArray[index1D] = value
         canvasImageDataArray[index1D + 1] = value

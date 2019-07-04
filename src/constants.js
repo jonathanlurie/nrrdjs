@@ -112,8 +112,48 @@ const SPACE_TO_SPACEDIMENSIONS = {
   '3d-left-handed-time': 4
 }
 
+// in NRRD, some "kinds" have to respect a certain size. For example, the kind
+// "quaternion" has to be of size 4 (xyzw).
+// When the value is 'null', then no enforcement is made.
+// Note: the fields have been turned to lowercase here
+const KIND_TO_SIZE = {
+  'domain': null,
+  'space': null,
+  'time': null,
+  'list': null,
+  'point': null,
+  'vector': null,
+  'covariant-vector': null,
+  'normal': null,
+  'stub': 1,
+  'scalar': 1,
+  'complex': 2,
+  '2-vector': 2,
+  '3-color': 3,
+  'rgb-color': 3,
+  'hsv-color': 3,
+  'xyz-color': 3,
+  '4-color': 4,
+  'rgba-color': 4,
+  '3-vector': 3,
+  '3-gradient': 3,
+  '3-normal': 3,
+  '4-vector': 4,
+  'quaternion': 4,
+  '2d-symmetric-matrix': 3,
+  '2d-masked-symmetric-matrix': 4,
+  '2d-matrix': 4,
+  '2d-masked-matrix': 4,
+  '3d-symmetric-matrix': 6,
+  '3d-masked-symmetric-matrix': 7,
+  '3d-matrix': 9,
+  '3d-masked-matrix': 10,
+  '???': null
+}
+
 export {
   NRRD_TYPES_TO_TYPEDARRAY,
   NRRD_TYPES_TO_VIEW_GET,
-  SPACE_TO_SPACEDIMENSIONS
+  SPACE_TO_SPACEDIMENSIONS,
+  KIND_TO_SIZE
 }

@@ -1,8 +1,28 @@
 import * as glMatrix from 'gl-matrix'
 
-
+/**
+ * The Toolbox is a set of static methods to extract some data from a parsed NRRD
+ * using the `header` and/or the `data` as returned by `nrrdjs.parse(...)`.
+ *
+ * The NRRD format does not make any assumption about the naming of the axis
+ * (X, Y, Z, A, B, C, etc.) but for the sake of accessibility, the Toolbox assumes
+ * that if there is more than 1 components per voxel (ex: RGB), they are encoded
+ * on the fastest axis. Otherwise:
+ * - The axis called `X` is encoded on the fastest axis
+ * - The axis called `Z` is encoded on the slowest axis
+ * - The axis called `Y` is encoded in between
+ * - The time axis, if any, is even slower than `Z`
+ *
+ * Note: the fast axis is the one where element along it are contiguous on the buffer (stride: 1)
+ */
 class Toolbox {
 
+  /**
+   * Get the number of components per voxel. For example, for a RGB volume,
+   * the ncpv is 3.
+   * @param {object} header - the header object as returned by the parser
+   * @return {number}
+   */
   static getNumberOfComponentPerVoxel(header){
     if(header['dimension'] === header['space dimension'] ||
        header['space directions'][0] !== null){
@@ -15,6 +35,12 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the number of time samples for this volume. If it's not a time sequence,
+   * then there is only a single time sample.
+   * @param {object} header - the header object as returned by the parser
+   * @return {number}
+   */
   static getNumberOfTimeSamples(header){
     if(header['dimension'] === header['space dimension'] ||
        header['space directions'][header['space directions'].length-1] !== null){
@@ -25,37 +51,45 @@ class Toolbox {
   }
 
   /**
-   * Extract a native slice in voxel coordinates. The "native slice" is the one
-   * that has the fastest dimension (axis) of the volume as width and the second
-   * fastest dimension as height. Then, the slowest varying axis is the index of
-   * the slice.
+   * Extract a slice of the XY plane in voxel coordinates. The horizontal axis of the
+   * 2D slice is along the X axis of the volume, the vertical axis on the 2D slice is
+   * along the Y axis of the volume, origin is at top-left.
    * @param {TypedArray} data - the volumetric data
    * @param {Object} header - the header object corresponding to the NRRD file
    * @param {Number} sliceIndex - index of the slice
-   * @return {TypedArray} - the array is a slice in the native TypedArray, unless options.uint8 is true,
-   * then an Uint8Array is returned
+   * @return {Object} as {width: Number, height: Number, data: TypedArray} where the data is
+   * of the same type as the volume buffer.
    */
-  static getNativeSlice(data, header, sliceIndex, options){
+  static getSliceXY(data, header, sliceIndex){
     if(sliceIndex < 0 || sliceIndex >= header.sizes[2]){
       throw new Error(`The slice index is out of bound. Must be in [0, ${header.sizes[2]-1}]`)
     }
 
     let ncpv = Toolbox.getNumberOfComponentPerVoxel(header)
-
     let sliceStride = header.sizes[0] * header.sizes[1]
     let byteOffset = ncpv * sliceIndex * sliceStride * data.BYTES_PER_ELEMENT
     let nbElem = sliceStride * ncpv
-    let slice = new data.constructor(data.buffer, byteOffset, nbElem)
-    return slice
+    let output = new data.constructor(data.buffer, byteOffset, nbElem)
+    return {
+      width: header.sizes[0],
+      height: header.sizes[1],
+      ncpv: ncpv,
+      data: output
+    }
   }
 
 
-  static getSliceXY(data, header, sliceIndex, options){
-    return Toolbox.getNativeSlice(data, header, sliceIndex, options)
-  }
-
-
-  static getSliceXZ(data, header, sliceIndex, options){
+  /**
+   * Extract a slice of the XZ plane in voxel coordinates. The horizontal axis of the
+   * 2D slice is along the X axis of the volume, the vertical axis on the 2D slice is
+   * along the Z axis of the volume, origin is at top-left.
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} sliceIndex - index of the slice
+   * @return {Object} as {width: Number, height: Number, data: TypedArray} where the data is
+   * of the same type as the volume buffer.
+   */
+  static getSliceXZ(data, header, sliceIndex){
     // TODO add NCPP
     let outputWidth = header.sizes[0]
     let outputHeight = header.sizes[2]
@@ -69,11 +103,26 @@ class Toolbox {
       output.set(row, j * outputWidth * ncpv)
     }
 
-    return output
+    return {
+      width: header.sizes[0],
+      height: header.sizes[2],
+      ncpv: ncpv,
+      data: output
+    }
   }
 
 
-  static getSliceYZ(data, header, sliceIndex, options){
+  /**
+   * Extract a slice of the YZ plane in voxel coordinates. The horizontal axis of the
+   * 2D slice is along the Y axis of the volume, the vertical axis on the 2D slice is
+   * along the Z axis of the volume, origin is at top-left.
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} sliceIndex - index of the slice
+   * @return {Object} as {width: Number, height: Number, data: TypedArray} where the data is
+   * of the same type as the volume buffer.
+   */
+  static getSliceYZ(data, header, sliceIndex){
     // TODO add NCPP
     let outputWidth = header.sizes[1]
     let outputHeight = header.sizes[2]
@@ -103,12 +152,23 @@ class Toolbox {
       }
     }
 
-    return output
+    return {
+      width: header.sizes[1],
+      height: header.sizes[2],
+      ncpv: ncpv,
+      data: output
+    }
   }
 
 
   /**
-   * xyz here are voxel coords, where x is the fastest axis and z is the slowest
+   * Get the value at the position (x, y, z) in voxel coordinates.
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @return {Array} as [v] because of compatibility to multiple components per voxel
    */
   static getValue(data, header, x, y, z){
     if(x < 0 || x >= header.sizes[0] ||
@@ -122,6 +182,15 @@ class Toolbox {
     return data.slice(index1D, index1D * ncpv)
   }
 
+
+  /**
+   * Get the 1D index within the buffer for the given (x, y, z) in voxel coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @param {Number} value at this position in 1D buffer
+   */
   static getIndex1D(header, x, y, z){
     if(x < 0 || x >= header.sizes[0] ||
        y < 0 || y >= header.sizes[1] ||
@@ -133,6 +202,11 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the affine matrix for converting voxel coordinates into world/subject coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @return {Float32Array} the matrix as a 4x4 column major
+   */
   static getVoxelToWorldMatrix(header){
     let offset = 'space origin' in header ? header['space origin'] : [0, 0, 0]
     let sc = 'space directions' in header ?
@@ -146,6 +220,11 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the affine matrix for converting world/subject coordinates into voxel coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @return {Float32Array} the matrix as a 4x4 column major
+   */
   static getWorldToVoxelMatrix(header){
     let v2w = Toolbox.getVoxelToWorldMatrix(header)
     let w2v = glMatrix.mat4.create()
@@ -154,6 +233,14 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the position voxel coordinates providing a position in world coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @return {Array} as [x, y, z]
+   */
   static getVoxelPositionFromWorldPosition(header, x, y, z){
     let worldPos = glMatrix.vec3.fromValues(x, y, z)
     let w2v = Toolbox.getWorldToVoxelMatrix(header)
@@ -163,6 +250,16 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the value at the given world coordinates.
+   * Note: the voxel coordinates is rounded
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @return {Array} as [v] because of compatibility to multiple components per voxel
+   */
   static getWorldValue(data, header, x, y, z){
     let voxelPosition = Toolbox.getVoxelPositionFromWorldPosition(header, x, y, z)
     return Toolbox.getValue(data, header, ...voxelPosition)

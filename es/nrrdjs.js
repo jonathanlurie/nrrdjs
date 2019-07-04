@@ -1,4 +1,5 @@
 import pako from 'pako';
+import { mat4, vec3 } from 'gl-matrix';
 
 /**
  * This is the mapping from the NRRD datatype as written in the NRRD header
@@ -114,6 +115,45 @@ const SPACE_TO_SPACEDIMENSIONS = {
   '3d-left-handed-time': 4
 };
 
+// in NRRD, some "kinds" have to respect a certain size. For example, the kind
+// "quaternion" has to be of size 4 (xyzw).
+// When the value is 'null', then no enforcement is made.
+// Note: the fields have been turned to lowercase here
+const KIND_TO_SIZE = {
+  'domain': null,
+  'space': null,
+  'time': null,
+  'list': null,
+  'point': null,
+  'vector': null,
+  'covariant-vector': null,
+  'normal': null,
+  'stub': 1,
+  'scalar': 1,
+  'complex': 2,
+  '2-vector': 2,
+  '3-color': 3,
+  'rgb-color': 3,
+  'hsv-color': 3,
+  'xyz-color': 3,
+  '4-color': 4,
+  'rgba-color': 4,
+  '3-vector': 3,
+  '3-gradient': 3,
+  '3-normal': 3,
+  '4-vector': 4,
+  'quaternion': 4,
+  '2d-symmetric-matrix': 3,
+  '2d-masked-symmetric-matrix': 4,
+  '2d-matrix': 4,
+  '2d-masked-matrix': 4,
+  '3d-symmetric-matrix': 6,
+  '3d-masked-symmetric-matrix': 7,
+  '3d-matrix': 9,
+  '3d-masked-matrix': 10,
+  '???': null
+};
+
 /**
  * Parse a buffer of a NRRD file.
  * Throws an exception if the file is not a proper NRRD file.
@@ -142,7 +182,8 @@ function parse(nrrdBuffer, options){
 
 
 /**
- * Parse the header
+ * @private
+ * Parses the header
  */
 function parseHeader(nrrdBuffer){
   let byteArrayHeader = [];
@@ -192,7 +233,7 @@ function parseHeader(nrrdBuffer){
 
   // parsing each fields of the header
   if(nrrdHeader['sizes']){
-    nrrdHeader['sizes'] = nrrdHeader.sizes.split(' ').map( n => parseInt(n));
+    nrrdHeader['sizes'] = nrrdHeader.sizes.split(/\s+/).map( n => parseInt(n));
   }
 
   if(nrrdHeader['space dimension']){
@@ -208,7 +249,7 @@ function parseHeader(nrrdBuffer){
   }
 
   if(nrrdHeader['space directions']){
-    nrrdHeader['space directions'] = nrrdHeader['space directions'].split(' ')
+    nrrdHeader['space directions'] = nrrdHeader['space directions'].split(/\s+/)
         .map(triple => {
           if(triple.trim() === 'none'){
             return null
@@ -221,9 +262,11 @@ function parseHeader(nrrdBuffer){
     if(nrrdHeader['space directions'].length !== nrrdHeader['dimension']){
       throw new Error('"space direction" property has to contain as many elements as dimensions. Non-spatial dimesnsions must be refered as "none". See http://teem.sourceforge.net/nrrd/format.html#spacedirections for more info.')
     }
-
   }
 
+  if(nrrdHeader['space units']){
+    nrrdHeader['space units'] = nrrdHeader['space units'].split(/\s+/);
+  }
 
   if(nrrdHeader['space origin']){
     nrrdHeader['space origin'] = nrrdHeader['space origin']
@@ -232,8 +275,88 @@ function parseHeader(nrrdBuffer){
         .map(n => parseFloat(n));
   }
 
+  if(nrrdHeader['measurement frame']){
+    nrrdHeader['measurement frame'] = nrrdHeader['measurement frame'].split(/\s+/)
+        .map(triple => {
+          if(triple.trim() === 'none'){
+            return null
+          }
+          return triple.slice(1, triple.length-1)
+                       .split(',')
+                       .map(n => parseFloat(n))
+        });
+  }
+
   if(nrrdHeader['kinds']){
-    nrrdHeader['kinds'] = nrrdHeader['kinds'].split(' ');
+    nrrdHeader['kinds'] = nrrdHeader['kinds'].split(/\s+/);
+
+    if(nrrdHeader['kinds'].length !== nrrdHeader['sizes'].length){
+      throw new Error(`The "kinds" property is expected to have has many elements as the "size" property.`)
+    }
+
+    nrrdHeader['kinds'].forEach((k, i) => {
+      let expectedLength = KIND_TO_SIZE[k.toLowerCase()];
+      let foundLength = nrrdHeader['sizes'][i];
+      if(expectedLength !== null && expectedLength !== foundLength){
+        throw new Error(`The kind "${k}" expect a size of ${expectedLength} but ${foundLength} found`)
+      }
+    });
+
+  }
+
+  if(nrrdHeader['min']){
+    nrrdHeader['min'] = parseFloat(nrrdHeader['min']);
+  }
+
+  if(nrrdHeader['max']){
+    nrrdHeader['max'] = parseFloat(nrrdHeader['max']);
+  }
+
+  if(nrrdHeader['old min']){
+    nrrdHeader['old min'] = parseFloat(nrrdHeader['old min']);
+  }
+
+  if(nrrdHeader['old max']){
+    nrrdHeader['old max'] = parseFloat(nrrdHeader['old max']);
+  }
+
+  if(nrrdHeader['spacings']){
+    nrrdHeader['spacings'] = nrrdHeader['spacings'].split(/\s+/).map(n => parseFloat(n));
+  }
+
+  if(nrrdHeader['thicknesses']){
+    nrrdHeader['thicknesses'] = nrrdHeader['thicknesses'].split(/\s+/).map(n => parseFloat(n));
+  }
+
+  if(nrrdHeader['axis mins']){
+    nrrdHeader['axis mins'] = nrrdHeader['axis mins'].split(/\s+/).map(n => parseFloat(n));
+  }
+
+  if(nrrdHeader['axismins']){
+    nrrdHeader['axismins'] = nrrdHeader['axismins'].split(/\s+/).map(n => parseFloat(n));
+  }
+
+  if(nrrdHeader['axis maxs']){
+    nrrdHeader['axis maxs'] = nrrdHeader['axis maxs'].split(/\s+/).map(n => parseFloat(n));
+  }
+
+  if(nrrdHeader['axismaxs']){
+    nrrdHeader['axismaxs'] = nrrdHeader['axismaxs'].split(/\s+/).map(n => parseFloat(n));
+  }
+
+  if(nrrdHeader['centers']){
+    nrrdHeader['centers'] = nrrdHeader['centers'].split(/\s+/).map(mode => {
+      if(mode === 'cell' || mode === 'node'){
+        return mode
+      } else {
+        return null
+      }
+    });
+  }
+
+
+  if(nrrdHeader['labels']){
+    nrrdHeader['labels'] = nrrdHeader['labels'].split(/\s+/);
   }
 
   // some additional metadata that are not part of the header will be added here
@@ -254,7 +377,10 @@ function parseHeader(nrrdBuffer){
   }
 }
 
-
+/**
+ * @private
+ * Parses the data
+ */
 function parseData(nrrdBuffer, header, dataByteOffset){
   let dataBuffer = null;
   let arrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type];
@@ -263,10 +389,11 @@ function parseData(nrrdBuffer, header, dataByteOffset){
   let max = -Infinity;
   let data = null;
 
+  let isTextEncoded = header.encoding === 'ascii' || header.encoding === 'txt' || header.encoding === 'text';
+
   if(header.encoding === 'raw'){
     dataBuffer = nrrdBuffer;
-  } else if(header.encoding === 'ascii'){
-    console.log(dataBuffer);
+  } else if(isTextEncoded){
     let numbers = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, dataByteOffset))
               .split(/\r\n|\n|\s/)
               .map(s => s.trim())
@@ -284,7 +411,7 @@ function parseData(nrrdBuffer, header, dataByteOffset){
     throw new Error('Only "raw", "ascii" and "gzip" encoding are supported.')
   }
 
-  if(header.encoding === 'ascii'){
+  if(isTextEncoded){
     if(nbElementsFromHeader !== data.length){
       throw new Error('Unconsistency in data buffer length')
     }
@@ -319,768 +446,28 @@ function parseData(nrrdBuffer, header, dataByteOffset){
 // We could use the presence of "none" in the prop "space direction" and the prop sizes
 
 /**
- * Common utilities
- * @module glMatrix
- */
-// Configuration Constants
-var EPSILON = 0.000001;
-var ARRAY_TYPE = typeof Float32Array !== 'undefined' ? Float32Array : Array;
-var degree = Math.PI / 180;
-
-/**
- * 3x3 Matrix
- * @module mat3
- */
-
-/**
- * Creates a new identity mat3
+ * The Toolbox is a set of static methods to extract some data from a parsed NRRD
+ * using the `header` and/or the `data` as returned by `nrrdjs.parse(...)`.
  *
- * @returns {mat3} a new 3x3 matrix
- */
-
-function create$2() {
-  var out = new ARRAY_TYPE(9);
-
-  if (ARRAY_TYPE != Float32Array) {
-    out[1] = 0;
-    out[2] = 0;
-    out[3] = 0;
-    out[5] = 0;
-    out[6] = 0;
-    out[7] = 0;
-  }
-
-  out[0] = 1;
-  out[4] = 1;
-  out[8] = 1;
-  return out;
-}
-
-/**
- * 4x4 Matrix<br>Format: column-major, when typed out it looks like row-major<br>The matrices are being post multiplied.
- * @module mat4
- */
-
-/**
- * Creates a new identity mat4
+ * The NRRD format does not make any assumption about the naming of the axis
+ * (X, Y, Z, A, B, C, etc.) but for the sake of accessibility, the Toolbox assumes
+ * that if there is more than 1 components per voxel (ex: RGB), they are encoded
+ * on the fastest axis. Otherwise:
+ * - The axis called `X` is encoded on the fastest axis
+ * - The axis called `Z` is encoded on the slowest axis
+ * - The axis called `Y` is encoded in between
+ * - The time axis, if any, is even slower than `Z`
  *
- * @returns {mat4} a new 4x4 matrix
+ * Note: the fast axis is the one where element along it are contiguous on the buffer (stride: 1)
  */
-
-function create$3() {
-  var out = new ARRAY_TYPE(16);
-
-  if (ARRAY_TYPE != Float32Array) {
-    out[1] = 0;
-    out[2] = 0;
-    out[3] = 0;
-    out[4] = 0;
-    out[6] = 0;
-    out[7] = 0;
-    out[8] = 0;
-    out[9] = 0;
-    out[11] = 0;
-    out[12] = 0;
-    out[13] = 0;
-    out[14] = 0;
-  }
-
-  out[0] = 1;
-  out[5] = 1;
-  out[10] = 1;
-  out[15] = 1;
-  return out;
-}
-/**
- * Create a new mat4 with the given values
- *
- * @param {Number} m00 Component in column 0, row 0 position (index 0)
- * @param {Number} m01 Component in column 0, row 1 position (index 1)
- * @param {Number} m02 Component in column 0, row 2 position (index 2)
- * @param {Number} m03 Component in column 0, row 3 position (index 3)
- * @param {Number} m10 Component in column 1, row 0 position (index 4)
- * @param {Number} m11 Component in column 1, row 1 position (index 5)
- * @param {Number} m12 Component in column 1, row 2 position (index 6)
- * @param {Number} m13 Component in column 1, row 3 position (index 7)
- * @param {Number} m20 Component in column 2, row 0 position (index 8)
- * @param {Number} m21 Component in column 2, row 1 position (index 9)
- * @param {Number} m22 Component in column 2, row 2 position (index 10)
- * @param {Number} m23 Component in column 2, row 3 position (index 11)
- * @param {Number} m30 Component in column 3, row 0 position (index 12)
- * @param {Number} m31 Component in column 3, row 1 position (index 13)
- * @param {Number} m32 Component in column 3, row 2 position (index 14)
- * @param {Number} m33 Component in column 3, row 3 position (index 15)
- * @returns {mat4} A new mat4
- */
-
-function fromValues$3(m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33) {
-  var out = new ARRAY_TYPE(16);
-  out[0] = m00;
-  out[1] = m01;
-  out[2] = m02;
-  out[3] = m03;
-  out[4] = m10;
-  out[5] = m11;
-  out[6] = m12;
-  out[7] = m13;
-  out[8] = m20;
-  out[9] = m21;
-  out[10] = m22;
-  out[11] = m23;
-  out[12] = m30;
-  out[13] = m31;
-  out[14] = m32;
-  out[15] = m33;
-  return out;
-}
-/**
- * Inverts a mat4
- *
- * @param {mat4} out the receiving matrix
- * @param {mat4} a the source matrix
- * @returns {mat4} out
- */
-
-function invert$3(out, a) {
-  var a00 = a[0],
-      a01 = a[1],
-      a02 = a[2],
-      a03 = a[3];
-  var a10 = a[4],
-      a11 = a[5],
-      a12 = a[6],
-      a13 = a[7];
-  var a20 = a[8],
-      a21 = a[9],
-      a22 = a[10],
-      a23 = a[11];
-  var a30 = a[12],
-      a31 = a[13],
-      a32 = a[14],
-      a33 = a[15];
-  var b00 = a00 * a11 - a01 * a10;
-  var b01 = a00 * a12 - a02 * a10;
-  var b02 = a00 * a13 - a03 * a10;
-  var b03 = a01 * a12 - a02 * a11;
-  var b04 = a01 * a13 - a03 * a11;
-  var b05 = a02 * a13 - a03 * a12;
-  var b06 = a20 * a31 - a21 * a30;
-  var b07 = a20 * a32 - a22 * a30;
-  var b08 = a20 * a33 - a23 * a30;
-  var b09 = a21 * a32 - a22 * a31;
-  var b10 = a21 * a33 - a23 * a31;
-  var b11 = a22 * a33 - a23 * a32; // Calculate the determinant
-
-  var det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-
-  if (!det) {
-    return null;
-  }
-
-  det = 1.0 / det;
-  out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
-  out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
-  out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
-  out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
-  out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
-  out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
-  out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
-  out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
-  out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
-  out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
-  out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
-  out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
-  out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
-  out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
-  out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
-  out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
-  return out;
-}
-
-/**
- * 3 Dimensional Vector
- * @module vec3
- */
-
-/**
- * Creates a new, empty vec3
- *
- * @returns {vec3} a new 3D vector
- */
-
-function create$4() {
-  var out = new ARRAY_TYPE(3);
-
-  if (ARRAY_TYPE != Float32Array) {
-    out[0] = 0;
-    out[1] = 0;
-    out[2] = 0;
-  }
-
-  return out;
-}
-/**
- * Calculates the length of a vec3
- *
- * @param {vec3} a vector to calculate length of
- * @returns {Number} length of a
- */
-
-function length(a) {
-  var x = a[0];
-  var y = a[1];
-  var z = a[2];
-  return Math.sqrt(x * x + y * y + z * z);
-}
-/**
- * Creates a new vec3 initialized with the given values
- *
- * @param {Number} x X component
- * @param {Number} y Y component
- * @param {Number} z Z component
- * @returns {vec3} a new 3D vector
- */
-
-function fromValues$4(x, y, z) {
-  var out = new ARRAY_TYPE(3);
-  out[0] = x;
-  out[1] = y;
-  out[2] = z;
-  return out;
-}
-/**
- * Normalize a vec3
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a vector to normalize
- * @returns {vec3} out
- */
-
-function normalize(out, a) {
-  var x = a[0];
-  var y = a[1];
-  var z = a[2];
-  var len = x * x + y * y + z * z;
-
-  if (len > 0) {
-    //TODO: evaluate use of glm_invsqrt here?
-    len = 1 / Math.sqrt(len);
-  }
-
-  out[0] = a[0] * len;
-  out[1] = a[1] * len;
-  out[2] = a[2] * len;
-  return out;
-}
-/**
- * Calculates the dot product of two vec3's
- *
- * @param {vec3} a the first operand
- * @param {vec3} b the second operand
- * @returns {Number} dot product of a and b
- */
-
-function dot(a, b) {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-/**
- * Computes the cross product of two vec3's
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the first operand
- * @param {vec3} b the second operand
- * @returns {vec3} out
- */
-
-function cross(out, a, b) {
-  var ax = a[0],
-      ay = a[1],
-      az = a[2];
-  var bx = b[0],
-      by = b[1],
-      bz = b[2];
-  out[0] = ay * bz - az * by;
-  out[1] = az * bx - ax * bz;
-  out[2] = ax * by - ay * bx;
-  return out;
-}
-/**
- * Transforms the vec3 with a mat4.
- * 4th vector component is implicitly '1'
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the vector to transform
- * @param {mat4} m matrix to transform with
- * @returns {vec3} out
- */
-
-function transformMat4(out, a, m) {
-  var x = a[0],
-      y = a[1],
-      z = a[2];
-  var w = m[3] * x + m[7] * y + m[11] * z + m[15];
-  w = w || 1.0;
-  out[0] = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
-  out[1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
-  out[2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
-  return out;
-}
-/**
- * Alias for {@link vec3.length}
- * @function
- */
-
-var len = length;
-/**
- * Perform some operation over an array of vec3s.
- *
- * @param {Array} a the array of vectors to iterate over
- * @param {Number} stride Number of elements between the start of each vec3. If 0 assumes tightly packed
- * @param {Number} offset Number of elements to skip at the beginning of the array
- * @param {Number} count Number of vec3s to iterate over. If 0 iterates over entire array
- * @param {Function} fn Function to call for each vector in the array
- * @param {Object} [arg] additional argument to pass to fn
- * @returns {Array} a
- * @function
- */
-
-var forEach = function () {
-  var vec = create$4();
-  return function (a, stride, offset, count, fn, arg) {
-    var i, l;
-
-    if (!stride) {
-      stride = 3;
-    }
-
-    if (!offset) {
-      offset = 0;
-    }
-
-    if (count) {
-      l = Math.min(count * stride + offset, a.length);
-    } else {
-      l = a.length;
-    }
-
-    for (i = offset; i < l; i += stride) {
-      vec[0] = a[i];
-      vec[1] = a[i + 1];
-      vec[2] = a[i + 2];
-      fn(vec, vec, arg);
-      a[i] = vec[0];
-      a[i + 1] = vec[1];
-      a[i + 2] = vec[2];
-    }
-
-    return a;
-  };
-}();
-
-/**
- * 4 Dimensional Vector
- * @module vec4
- */
-
-/**
- * Creates a new, empty vec4
- *
- * @returns {vec4} a new 4D vector
- */
-
-function create$5() {
-  var out = new ARRAY_TYPE(4);
-
-  if (ARRAY_TYPE != Float32Array) {
-    out[0] = 0;
-    out[1] = 0;
-    out[2] = 0;
-    out[3] = 0;
-  }
-
-  return out;
-}
-/**
- * Normalize a vec4
- *
- * @param {vec4} out the receiving vector
- * @param {vec4} a vector to normalize
- * @returns {vec4} out
- */
-
-function normalize$1(out, a) {
-  var x = a[0];
-  var y = a[1];
-  var z = a[2];
-  var w = a[3];
-  var len = x * x + y * y + z * z + w * w;
-
-  if (len > 0) {
-    len = 1 / Math.sqrt(len);
-  }
-
-  out[0] = x * len;
-  out[1] = y * len;
-  out[2] = z * len;
-  out[3] = w * len;
-  return out;
-}
-/**
- * Perform some operation over an array of vec4s.
- *
- * @param {Array} a the array of vectors to iterate over
- * @param {Number} stride Number of elements between the start of each vec4. If 0 assumes tightly packed
- * @param {Number} offset Number of elements to skip at the beginning of the array
- * @param {Number} count Number of vec4s to iterate over. If 0 iterates over entire array
- * @param {Function} fn Function to call for each vector in the array
- * @param {Object} [arg] additional argument to pass to fn
- * @returns {Array} a
- * @function
- */
-
-var forEach$1 = function () {
-  var vec = create$5();
-  return function (a, stride, offset, count, fn, arg) {
-    var i, l;
-
-    if (!stride) {
-      stride = 4;
-    }
-
-    if (!offset) {
-      offset = 0;
-    }
-
-    if (count) {
-      l = Math.min(count * stride + offset, a.length);
-    } else {
-      l = a.length;
-    }
-
-    for (i = offset; i < l; i += stride) {
-      vec[0] = a[i];
-      vec[1] = a[i + 1];
-      vec[2] = a[i + 2];
-      vec[3] = a[i + 3];
-      fn(vec, vec, arg);
-      a[i] = vec[0];
-      a[i + 1] = vec[1];
-      a[i + 2] = vec[2];
-      a[i + 3] = vec[3];
-    }
-
-    return a;
-  };
-}();
-
-/**
- * Quaternion
- * @module quat
- */
-
-/**
- * Creates a new identity quat
- *
- * @returns {quat} a new quaternion
- */
-
-function create$6() {
-  var out = new ARRAY_TYPE(4);
-
-  if (ARRAY_TYPE != Float32Array) {
-    out[0] = 0;
-    out[1] = 0;
-    out[2] = 0;
-  }
-
-  out[3] = 1;
-  return out;
-}
-/**
- * Sets a quat from the given angle and rotation axis,
- * then returns it.
- *
- * @param {quat} out the receiving quaternion
- * @param {vec3} axis the axis around which to rotate
- * @param {Number} rad the angle in radians
- * @returns {quat} out
- **/
-
-function setAxisAngle(out, axis, rad) {
-  rad = rad * 0.5;
-  var s = Math.sin(rad);
-  out[0] = s * axis[0];
-  out[1] = s * axis[1];
-  out[2] = s * axis[2];
-  out[3] = Math.cos(rad);
-  return out;
-}
-/**
- * Performs a spherical linear interpolation between two quat
- *
- * @param {quat} out the receiving quaternion
- * @param {quat} a the first operand
- * @param {quat} b the second operand
- * @param {Number} t interpolation amount, in the range [0-1], between the two inputs
- * @returns {quat} out
- */
-
-function slerp(out, a, b, t) {
-  // benchmarks:
-  //    http://jsperf.com/quaternion-slerp-implementations
-  var ax = a[0],
-      ay = a[1],
-      az = a[2],
-      aw = a[3];
-  var bx = b[0],
-      by = b[1],
-      bz = b[2],
-      bw = b[3];
-  var omega, cosom, sinom, scale0, scale1; // calc cosine
-
-  cosom = ax * bx + ay * by + az * bz + aw * bw; // adjust signs (if necessary)
-
-  if (cosom < 0.0) {
-    cosom = -cosom;
-    bx = -bx;
-    by = -by;
-    bz = -bz;
-    bw = -bw;
-  } // calculate coefficients
-
-
-  if (1.0 - cosom > EPSILON) {
-    // standard case (slerp)
-    omega = Math.acos(cosom);
-    sinom = Math.sin(omega);
-    scale0 = Math.sin((1.0 - t) * omega) / sinom;
-    scale1 = Math.sin(t * omega) / sinom;
-  } else {
-    // "from" and "to" quaternions are very close
-    //  ... so we can do a linear interpolation
-    scale0 = 1.0 - t;
-    scale1 = t;
-  } // calculate final values
-
-
-  out[0] = scale0 * ax + scale1 * bx;
-  out[1] = scale0 * ay + scale1 * by;
-  out[2] = scale0 * az + scale1 * bz;
-  out[3] = scale0 * aw + scale1 * bw;
-  return out;
-}
-/**
- * Creates a quaternion from the given 3x3 rotation matrix.
- *
- * NOTE: The resultant quaternion is not normalized, so you should be sure
- * to renormalize the quaternion yourself where necessary.
- *
- * @param {quat} out the receiving quaternion
- * @param {mat3} m rotation matrix
- * @returns {quat} out
- * @function
- */
-
-function fromMat3(out, m) {
-  // Algorithm in Ken Shoemake's article in 1987 SIGGRAPH course notes
-  // article "Quaternion Calculus and Fast Animation".
-  var fTrace = m[0] + m[4] + m[8];
-  var fRoot;
-
-  if (fTrace > 0.0) {
-    // |w| > 1/2, may as well choose w > 1/2
-    fRoot = Math.sqrt(fTrace + 1.0); // 2w
-
-    out[3] = 0.5 * fRoot;
-    fRoot = 0.5 / fRoot; // 1/(4w)
-
-    out[0] = (m[5] - m[7]) * fRoot;
-    out[1] = (m[6] - m[2]) * fRoot;
-    out[2] = (m[1] - m[3]) * fRoot;
-  } else {
-    // |w| <= 1/2
-    var i = 0;
-    if (m[4] > m[0]) i = 1;
-    if (m[8] > m[i * 3 + i]) i = 2;
-    var j = (i + 1) % 3;
-    var k = (i + 2) % 3;
-    fRoot = Math.sqrt(m[i * 3 + i] - m[j * 3 + j] - m[k * 3 + k] + 1.0);
-    out[i] = 0.5 * fRoot;
-    fRoot = 0.5 / fRoot;
-    out[3] = (m[j * 3 + k] - m[k * 3 + j]) * fRoot;
-    out[j] = (m[j * 3 + i] + m[i * 3 + j]) * fRoot;
-    out[k] = (m[k * 3 + i] + m[i * 3 + k]) * fRoot;
-  }
-
-  return out;
-}
-/**
- * Normalize a quat
- *
- * @param {quat} out the receiving quaternion
- * @param {quat} a quaternion to normalize
- * @returns {quat} out
- * @function
- */
-
-var normalize$2 = normalize$1;
-/**
- * Sets a quaternion to represent the shortest rotation from one
- * vector to another.
- *
- * Both vectors are assumed to be unit length.
- *
- * @param {quat} out the receiving quaternion.
- * @param {vec3} a the initial vector
- * @param {vec3} b the destination vector
- * @returns {quat} out
- */
-
-var rotationTo = function () {
-  var tmpvec3 = create$4();
-  var xUnitVec3 = fromValues$4(1, 0, 0);
-  var yUnitVec3 = fromValues$4(0, 1, 0);
-  return function (out, a, b) {
-    var dot$$1 = dot(a, b);
-
-    if (dot$$1 < -0.999999) {
-      cross(tmpvec3, xUnitVec3, a);
-      if (len(tmpvec3) < 0.000001) cross(tmpvec3, yUnitVec3, a);
-      normalize(tmpvec3, tmpvec3);
-      setAxisAngle(out, tmpvec3, Math.PI);
-      return out;
-    } else if (dot$$1 > 0.999999) {
-      out[0] = 0;
-      out[1] = 0;
-      out[2] = 0;
-      out[3] = 1;
-      return out;
-    } else {
-      cross(tmpvec3, a, b);
-      out[0] = tmpvec3[0];
-      out[1] = tmpvec3[1];
-      out[2] = tmpvec3[2];
-      out[3] = 1 + dot$$1;
-      return normalize$2(out, out);
-    }
-  };
-}();
-/**
- * Performs a spherical linear interpolation with two control points
- *
- * @param {quat} out the receiving quaternion
- * @param {quat} a the first operand
- * @param {quat} b the second operand
- * @param {quat} c the third operand
- * @param {quat} d the fourth operand
- * @param {Number} t interpolation amount, in the range [0-1], between the two inputs
- * @returns {quat} out
- */
-
-var sqlerp = function () {
-  var temp1 = create$6();
-  var temp2 = create$6();
-  return function (out, a, b, c, d, t) {
-    slerp(temp1, a, d, t);
-    slerp(temp2, b, c, t);
-    slerp(out, temp1, temp2, 2 * t * (1 - t));
-    return out;
-  };
-}();
-/**
- * Sets the specified quaternion with values corresponding to the given
- * axes. Each axis is a vec3 and is expected to be unit length and
- * perpendicular to all other specified axes.
- *
- * @param {vec3} view  the vector representing the viewing direction
- * @param {vec3} right the vector representing the local "right" direction
- * @param {vec3} up    the vector representing the local "up" direction
- * @returns {quat} out
- */
-
-var setAxes = function () {
-  var matr = create$2();
-  return function (out, view, right, up) {
-    matr[0] = right[0];
-    matr[3] = right[1];
-    matr[6] = right[2];
-    matr[1] = up[0];
-    matr[4] = up[1];
-    matr[7] = up[2];
-    matr[2] = -view[0];
-    matr[5] = -view[1];
-    matr[8] = -view[2];
-    return normalize$2(out, fromMat3(out, matr));
-  };
-}();
-
-/**
- * 2 Dimensional Vector
- * @module vec2
- */
-
-/**
- * Creates a new, empty vec2
- *
- * @returns {vec2} a new 2D vector
- */
-
-function create$8() {
-  var out = new ARRAY_TYPE(2);
-
-  if (ARRAY_TYPE != Float32Array) {
-    out[0] = 0;
-    out[1] = 0;
-  }
-
-  return out;
-}
-/**
- * Perform some operation over an array of vec2s.
- *
- * @param {Array} a the array of vectors to iterate over
- * @param {Number} stride Number of elements between the start of each vec2. If 0 assumes tightly packed
- * @param {Number} offset Number of elements to skip at the beginning of the array
- * @param {Number} count Number of vec2s to iterate over. If 0 iterates over entire array
- * @param {Function} fn Function to call for each vector in the array
- * @param {Object} [arg] additional argument to pass to fn
- * @returns {Array} a
- * @function
- */
-
-var forEach$2 = function () {
-  var vec = create$8();
-  return function (a, stride, offset, count, fn, arg) {
-    var i, l;
-
-    if (!stride) {
-      stride = 2;
-    }
-
-    if (!offset) {
-      offset = 0;
-    }
-
-    if (count) {
-      l = Math.min(count * stride + offset, a.length);
-    } else {
-      l = a.length;
-    }
-
-    for (i = offset; i < l; i += stride) {
-      vec[0] = a[i];
-      vec[1] = a[i + 1];
-      fn(vec, vec, arg);
-      a[i] = vec[0];
-      a[i + 1] = vec[1];
-    }
-
-    return a;
-  };
-}();
-
 class Toolbox {
 
+  /**
+   * Get the number of components per voxel. For example, for a RGB volume,
+   * the ncpv is 3.
+   * @param {object} header - the header object as returned by the parser
+   * @return {number}
+   */
   static getNumberOfComponentPerVoxel(header){
     if(header['dimension'] === header['space dimension'] ||
        header['space directions'][0] !== null){
@@ -1093,6 +480,12 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the number of time samples for this volume. If it's not a time sequence,
+   * then there is only a single time sample.
+   * @param {object} header - the header object as returned by the parser
+   * @return {number}
+   */
   static getNumberOfTimeSamples(header){
     if(header['dimension'] === header['space dimension'] ||
        header['space directions'][header['space directions'].length-1] !== null){
@@ -1103,37 +496,45 @@ class Toolbox {
   }
 
   /**
-   * Extract a native slice in voxel coordinates. The "native slice" is the one
-   * that has the fastest dimension (axis) of the volume as width and the second
-   * fastest dimension as height. Then, the slowest varying axis is the index of
-   * the slice.
+   * Extract a slice of the XY plane in voxel coordinates. The horizontal axis of the
+   * 2D slice is along the X axis of the volume, the vertical axis on the 2D slice is
+   * along the Y axis of the volume, origin is at top-left.
    * @param {TypedArray} data - the volumetric data
    * @param {Object} header - the header object corresponding to the NRRD file
    * @param {Number} sliceIndex - index of the slice
-   * @return {TypedArray} - the array is a slice in the native TypedArray, unless options.uint8 is true,
-   * then an Uint8Array is returned
+   * @return {Object} as {width: Number, height: Number, data: TypedArray} where the data is
+   * of the same type as the volume buffer.
    */
-  static getNativeSlice(data, header, sliceIndex, options){
+  static getSliceXY(data, header, sliceIndex){
     if(sliceIndex < 0 || sliceIndex >= header.sizes[2]){
       throw new Error(`The slice index is out of bound. Must be in [0, ${header.sizes[2]-1}]`)
     }
 
     let ncpv = Toolbox.getNumberOfComponentPerVoxel(header);
-
     let sliceStride = header.sizes[0] * header.sizes[1];
     let byteOffset = ncpv * sliceIndex * sliceStride * data.BYTES_PER_ELEMENT;
     let nbElem = sliceStride * ncpv;
-    let slice = new data.constructor(data.buffer, byteOffset, nbElem);
-    return slice
+    let output = new data.constructor(data.buffer, byteOffset, nbElem);
+    return {
+      width: header.sizes[0],
+      height: header.sizes[1],
+      ncpv: ncpv,
+      data: output
+    }
   }
 
 
-  static getSliceXY(data, header, sliceIndex, options){
-    return Toolbox.getNativeSlice(data, header, sliceIndex, options)
-  }
-
-
-  static getSliceXZ(data, header, sliceIndex, options){
+  /**
+   * Extract a slice of the XZ plane in voxel coordinates. The horizontal axis of the
+   * 2D slice is along the X axis of the volume, the vertical axis on the 2D slice is
+   * along the Z axis of the volume, origin is at top-left.
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} sliceIndex - index of the slice
+   * @return {Object} as {width: Number, height: Number, data: TypedArray} where the data is
+   * of the same type as the volume buffer.
+   */
+  static getSliceXZ(data, header, sliceIndex){
     // TODO add NCPP
     let outputWidth = header.sizes[0];
     let outputHeight = header.sizes[2];
@@ -1146,11 +547,26 @@ class Toolbox {
       output.set(row, j * outputWidth * ncpv);
     }
 
-    return output
+    return {
+      width: header.sizes[0],
+      height: header.sizes[2],
+      ncpv: ncpv,
+      data: output
+    }
   }
 
 
-  static getSliceYZ(data, header, sliceIndex, options){
+  /**
+   * Extract a slice of the YZ plane in voxel coordinates. The horizontal axis of the
+   * 2D slice is along the Y axis of the volume, the vertical axis on the 2D slice is
+   * along the Z axis of the volume, origin is at top-left.
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} sliceIndex - index of the slice
+   * @return {Object} as {width: Number, height: Number, data: TypedArray} where the data is
+   * of the same type as the volume buffer.
+   */
+  static getSliceYZ(data, header, sliceIndex){
     // TODO add NCPP
     let outputWidth = header.sizes[1];
     let outputHeight = header.sizes[2];
@@ -1180,12 +596,23 @@ class Toolbox {
       }
     }
 
-    return output
+    return {
+      width: header.sizes[1],
+      height: header.sizes[2],
+      ncpv: ncpv,
+      data: output
+    }
   }
 
 
   /**
-   * xyz here are voxel coords, where x is the fastest axis and z is the slowest
+   * Get the value at the position (x, y, z) in voxel coordinates.
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @return {Array} as [v] because of compatibility to multiple components per voxel
    */
   static getValue(data, header, x, y, z){
     if(x < 0 || x >= header.sizes[0] ||
@@ -1199,6 +626,15 @@ class Toolbox {
     return data.slice(index1D, index1D * ncpv)
   }
 
+
+  /**
+   * Get the 1D index within the buffer for the given (x, y, z) in voxel coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @param {Number} value at this position in 1D buffer
+   */
   static getIndex1D(header, x, y, z){
     if(x < 0 || x >= header.sizes[0] ||
        y < 0 || y >= header.sizes[1] ||
@@ -1210,12 +646,17 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the affine matrix for converting voxel coordinates into world/subject coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @return {Float32Array} the matrix as a 4x4 column major
+   */
   static getVoxelToWorldMatrix(header){
     let offset = 'space origin' in header ? header['space origin'] : [0, 0, 0];
     let sc = 'space directions' in header ?
                 header['space directions'].filter(v => v !== null) :
                 [ [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] ];
-    let v2w = fromValues$3(sc[0][0], sc[0][1], sc[0][2], 0,
+    let v2w = mat4.fromValues(sc[0][0], sc[0][1], sc[0][2], 0,
                                        sc[1][0], sc[1][1], sc[1][2], 0,
                                        sc[2][0], sc[2][1], sc[2][2], 0,
                                        offset[0], offset[1], offset[2], 1);
@@ -1223,23 +664,46 @@ class Toolbox {
   }
 
 
+  /**
+   * Get the affine matrix for converting world/subject coordinates into voxel coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @return {Float32Array} the matrix as a 4x4 column major
+   */
   static getWorldToVoxelMatrix(header){
     let v2w = Toolbox.getVoxelToWorldMatrix(header);
-    let w2v = create$3();
-    invert$3(w2v, v2w);
+    let w2v = mat4.create();
+    mat4.invert(w2v, v2w);
     return w2v
   }
 
 
+  /**
+   * Get the position voxel coordinates providing a position in world coordinates
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @return {Array} as [x, y, z]
+   */
   static getVoxelPositionFromWorldPosition(header, x, y, z){
-    let worldPos = fromValues$4(x, y, z);
+    let worldPos = vec3.fromValues(x, y, z);
     let w2v = Toolbox.getWorldToVoxelMatrix(header);
-    let voxelPos = create$4();
-    transformMat4(voxelPos, worldPos, w2v);
+    let voxelPos = vec3.create();
+    vec3.transformMat4(voxelPos, worldPos, w2v);
     return voxelPos.map(n => Math.round(n))
   }
 
 
+  /**
+   * Get the value at the given world coordinates.
+   * Note: the voxel coordinates is rounded
+   * @param {TypedArray} data - the volumetric data
+   * @param {Object} header - the header object corresponding to the NRRD file
+   * @param {Number} x - the x position (fastest varying axis)
+   * @param {Number} y - the y position
+   * @param {Number} z - the z position (slowest varying)
+   * @return {Array} as [v] because of compatibility to multiple components per voxel
+   */
   static getWorldValue(data, header, x, y, z){
     let voxelPosition = Toolbox.getVoxelPositionFromWorldPosition(header, x, y, z);
     return Toolbox.getValue(data, header, ...voxelPosition)

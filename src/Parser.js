@@ -1,5 +1,10 @@
 import pako from 'pako'
-import { NRRD_TYPES_TO_TYPEDARRAY, NRRD_TYPES_TO_VIEW_GET, SPACE_TO_SPACEDIMENSIONS } from './constants'
+import {
+  NRRD_TYPES_TO_TYPEDARRAY,
+  NRRD_TYPES_TO_VIEW_GET,
+  SPACE_TO_SPACEDIMENSIONS,
+  KIND_TO_SIZE
+} from './constants'
 
 
 /**
@@ -30,7 +35,8 @@ export default function parse(nrrdBuffer, options){
 
 
 /**
- * Parse the header
+ * @private
+ * Parses the header
  */
 function parseHeader(nrrdBuffer){
   let byteArrayHeader = []
@@ -80,7 +86,7 @@ function parseHeader(nrrdBuffer){
 
   // parsing each fields of the header
   if(nrrdHeader['sizes']){
-    nrrdHeader['sizes'] = nrrdHeader.sizes.split(' ').map( n => parseInt(n))
+    nrrdHeader['sizes'] = nrrdHeader.sizes.split(/\s+/).map( n => parseInt(n))
   }
 
   if(nrrdHeader['space dimension']){
@@ -96,7 +102,7 @@ function parseHeader(nrrdBuffer){
   }
 
   if(nrrdHeader['space directions']){
-    nrrdHeader['space directions'] = nrrdHeader['space directions'].split(' ')
+    nrrdHeader['space directions'] = nrrdHeader['space directions'].split(/\s+/)
         .map(triple => {
           if(triple.trim() === 'none'){
             return null
@@ -109,9 +115,11 @@ function parseHeader(nrrdBuffer){
     if(nrrdHeader['space directions'].length !== nrrdHeader['dimension']){
       throw new Error('"space direction" property has to contain as many elements as dimensions. Non-spatial dimesnsions must be refered as "none". See http://teem.sourceforge.net/nrrd/format.html#spacedirections for more info.')
     }
-
   }
 
+  if(nrrdHeader['space units']){
+    nrrdHeader['space units'] = nrrdHeader['space units'].split(/\s+/)
+  }
 
   if(nrrdHeader['space origin']){
     nrrdHeader['space origin'] = nrrdHeader['space origin']
@@ -120,8 +128,88 @@ function parseHeader(nrrdBuffer){
         .map(n => parseFloat(n))
   }
 
+  if(nrrdHeader['measurement frame']){
+    nrrdHeader['measurement frame'] = nrrdHeader['measurement frame'].split(/\s+/)
+        .map(triple => {
+          if(triple.trim() === 'none'){
+            return null
+          }
+          return triple.slice(1, triple.length-1)
+                       .split(',')
+                       .map(n => parseFloat(n))
+        })
+  }
+
   if(nrrdHeader['kinds']){
-    nrrdHeader['kinds'] = nrrdHeader['kinds'].split(' ')
+    nrrdHeader['kinds'] = nrrdHeader['kinds'].split(/\s+/)
+
+    if(nrrdHeader['kinds'].length !== nrrdHeader['sizes'].length){
+      throw new Error(`The "kinds" property is expected to have has many elements as the "size" property.`)
+    }
+
+    nrrdHeader['kinds'].forEach((k, i) => {
+      let expectedLength = KIND_TO_SIZE[k.toLowerCase()]
+      let foundLength = nrrdHeader['sizes'][i]
+      if(expectedLength !== null && expectedLength !== foundLength){
+        throw new Error(`The kind "${k}" expect a size of ${expectedLength} but ${foundLength} found`)
+      }
+    })
+
+  }
+
+  if(nrrdHeader['min']){
+    nrrdHeader['min'] = parseFloat(nrrdHeader['min'])
+  }
+
+  if(nrrdHeader['max']){
+    nrrdHeader['max'] = parseFloat(nrrdHeader['max'])
+  }
+
+  if(nrrdHeader['old min']){
+    nrrdHeader['old min'] = parseFloat(nrrdHeader['old min'])
+  }
+
+  if(nrrdHeader['old max']){
+    nrrdHeader['old max'] = parseFloat(nrrdHeader['old max'])
+  }
+
+  if(nrrdHeader['spacings']){
+    nrrdHeader['spacings'] = nrrdHeader['spacings'].split(/\s+/).map(n => parseFloat(n))
+  }
+
+  if(nrrdHeader['thicknesses']){
+    nrrdHeader['thicknesses'] = nrrdHeader['thicknesses'].split(/\s+/).map(n => parseFloat(n))
+  }
+
+  if(nrrdHeader['axis mins']){
+    nrrdHeader['axis mins'] = nrrdHeader['axis mins'].split(/\s+/).map(n => parseFloat(n))
+  }
+
+  if(nrrdHeader['axismins']){
+    nrrdHeader['axismins'] = nrrdHeader['axismins'].split(/\s+/).map(n => parseFloat(n))
+  }
+
+  if(nrrdHeader['axis maxs']){
+    nrrdHeader['axis maxs'] = nrrdHeader['axis maxs'].split(/\s+/).map(n => parseFloat(n))
+  }
+
+  if(nrrdHeader['axismaxs']){
+    nrrdHeader['axismaxs'] = nrrdHeader['axismaxs'].split(/\s+/).map(n => parseFloat(n))
+  }
+
+  if(nrrdHeader['centers']){
+    nrrdHeader['centers'] = nrrdHeader['centers'].split(/\s+/).map(mode => {
+      if(mode === 'cell' || mode === 'node'){
+        return mode
+      } else {
+        return null
+      }
+    })
+  }
+
+
+  if(nrrdHeader['labels']){
+    nrrdHeader['labels'] = nrrdHeader['labels'].split(/\s+/)
   }
 
   // some additional metadata that are not part of the header will be added here
@@ -142,7 +230,10 @@ function parseHeader(nrrdBuffer){
   }
 }
 
-
+/**
+ * @private
+ * Parses the data
+ */
 function parseData(nrrdBuffer, header, dataByteOffset){
   let dataBuffer = null
   let arrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type]
@@ -151,10 +242,11 @@ function parseData(nrrdBuffer, header, dataByteOffset){
   let max = -Infinity
   let data = null
 
+  let isTextEncoded = header.encoding === 'ascii' || header.encoding === 'txt' || header.encoding === 'text'
+
   if(header.encoding === 'raw'){
     dataBuffer = nrrdBuffer
-  } else if(header.encoding === 'ascii'){
-    console.log(dataBuffer)
+  } else if(isTextEncoded){
     let numbers = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, dataByteOffset))
               .split(/\r\n|\n|\s/)
               .map(s => s.trim())
@@ -172,7 +264,7 @@ function parseData(nrrdBuffer, header, dataByteOffset){
     throw new Error('Only "raw", "ascii" and "gzip" encoding are supported.')
   }
 
-  if(header.encoding === 'ascii'){
+  if(isTextEncoded){
     if(nbElementsFromHeader !== data.length){
       throw new Error('Unconsistency in data buffer length')
     }

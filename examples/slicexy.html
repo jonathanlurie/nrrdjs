@@ -42,14 +42,21 @@
       sliceIndexSlider.max = myNrrd.header.sizes[2] - 1
       sliceIndexSlider.value = middleSlice
       displayNrrdSlice(middleSlice)
+
+      let v2wMat = nrrdjs.Toolbox.getVoxelToWorldMatrix(myNrrd.header)
+      console.log('v2w', v2wMat)
+
+      let w2vMat = nrrdjs.Toolbox.getWorldToVoxelMatrix(myNrrd.header)
+      console.log('w2v', w2vMat)
+
+      console.log('Components per voxel:', nrrdjs.Toolbox.getNumberOfComponentPerVoxel(myNrrd.header))
+      console.log('Number of time samples:', nrrdjs.Toolbox.getNumberOfTimeSamples(myNrrd.header))
+
     }
 
 
     function displayNrrdSlice(sliceIndex){
-      console.time('getSliceXY')
       let slice = nrrdjs.Toolbox.getSliceXY(myNrrd.data, myNrrd.header, sliceIndex, {uint8: false})
-      console.timeEnd('getSliceXY')
-      
       let canvas = document.getElementById('nrrdSliceDisplay')
       canvas.width = myNrrd.header.sizes[0]
       canvas.height = myNrrd.header.sizes[1]

@@ -1,3 +1,6 @@
+import * as glMatrix from 'gl-matrix'
+
+
 class Toolbox {
 
   static getNumberOfComponentPerVoxel(header){
@@ -37,9 +40,11 @@ class Toolbox {
       throw new Error(`The slice index is out of bound. Must be in [0, ${header.sizes[2]-1}]`)
     }
 
+    let ncpv = Toolbox.getNumberOfComponentPerVoxel(header)
+
     let sliceStride = header.sizes[0] * header.sizes[1]
-    let byteOffset = sliceIndex * sliceStride * data.BYTES_PER_ELEMENT
-    let nbElem = sliceStride
+    let byteOffset = ncpv * sliceIndex * sliceStride * data.BYTES_PER_ELEMENT
+    let nbElem = sliceStride * ncpv
     let slice = new data.constructor(data.buffer, byteOffset, nbElem)
     return slice
   }
@@ -54,15 +59,14 @@ class Toolbox {
     // TODO add NCPP
     let outputWidth = header.sizes[0]
     let outputHeight = header.sizes[2]
-    let output = new data.constructor(outputWidth * outputHeight)
+    let ncpv = Toolbox.getNumberOfComponentPerVoxel(header)
+    let output = new data.constructor(outputWidth * outputHeight * ncpv)
     let tempData = []
 
     for(let j=0; j<outputHeight; j++){
-      let index1Dbegin = Toolbox.getIndex1D(header, 0, sliceIndex, j)
-      let index1Dend = index1Dbegin + outputWidth
-      let byteOffset = index1Dbegin * data.BYTES_PER_ELEMENT
-      let row = new data.constructor(data.buffer, byteOffset, outputWidth)
-      output.set(row, j*outputWidth)
+      let byteOffset = Toolbox.getIndex1D(header, 0, sliceIndex, j) * data.BYTES_PER_ELEMENT
+      let row = new data.constructor(data.buffer, byteOffset, outputWidth * ncpv)
+      output.set(row, j * outputWidth * ncpv)
     }
 
     return output
@@ -73,14 +77,29 @@ class Toolbox {
     // TODO add NCPP
     let outputWidth = header.sizes[1]
     let outputHeight = header.sizes[2]
-    let output = new data.constructor(outputWidth * outputHeight)
+    let ncpv = Toolbox.getNumberOfComponentPerVoxel(header)
+    let output = new data.constructor(outputWidth * outputHeight * ncpv)
     let counter = 0
 
-    for(let j=0; j<outputHeight; j++){
-      for(let i=0; i<outputWidth; i++){
-        let index1D = sliceIndex * header.extra.stride[0] + i * header.extra.stride[1] + j * header.extra.stride[2]
-        output[counter] = data[index1D]
-        counter ++
+    // doing that on ncpv = 1 is much faster than using a generic method so we separate.
+    // This is due to slicing on YZ planes not being able to leverage any buffer connexity
+    if(ncpv === 1){
+      for(let j=0; j<outputHeight; j++){
+        for(let i=0; i<outputWidth; i++){
+          let index1D = sliceIndex * header.extra.stride[0] + i * header.extra.stride[1] + j * header.extra.stride[2]
+          output[counter] = data[index1D]
+          counter ++
+        }
+      }
+    } else {
+      for(let j=0; j<outputHeight; j++){
+        for(let i=0; i<outputWidth; i++){
+          let index1D = (sliceIndex * header.extra.stride[0] + i * header.extra.stride[1] + j * header.extra.stride[2]) * ncpv
+          let byteOffset = index1D * data.BYTES_PER_ELEMENT
+          let spectrum = new data.constructor(data.buffer, byteOffset, ncpv)
+          output.set( spectrum, counter )
+          counter += ncpv
+        }
       }
     }
 
@@ -97,9 +116,10 @@ class Toolbox {
        z < 0 || z >= header.sizes[2]){
       throw new Error(`The position is out of range.`)
     }
-
-    let index1D = x * header.extra.stride[0] + y * header.extra.stride[1] + z * header.extra.stride[2]
-    return data[index1D]
+    let ncpv = Toolbox.getNumberOfComponentPerVoxel(header)
+    let index1D = (x * header.extra.stride[0] + y * header.extra.stride[1] + z * header.extra.stride[2]) * ncpv
+    // return data[index1D]
+    return data.slice(index1D, index1D * ncpv)
   }
 
   static getIndex1D(header, x, y, z){
@@ -108,8 +128,44 @@ class Toolbox {
        z < 0 || z >= header.sizes[2]){
       throw new Error(`The position is out of range.`)
     }
+    let ncpv = Toolbox.getNumberOfComponentPerVoxel(header)
+    return (x * header.extra.stride[0] + y * header.extra.stride[1] + z * header.extra.stride[2]) * ncpv
+  }
 
-    return x * header.extra.stride[0] + y * header.extra.stride[1] + z * header.extra.stride[2]
+
+  static getVoxelToWorldMatrix(header){
+    let offset = 'space origin' in header ? header['space origin'] : [0, 0, 0]
+    let sc = 'space directions' in header ?
+                header['space directions'].filter(v => v !== null) :
+                [ [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] ]
+    let v2w = glMatrix.mat4.fromValues(sc[0][0], sc[0][1], sc[0][2], 0,
+                                       sc[1][0], sc[1][1], sc[1][2], 0,
+                                       sc[2][0], sc[2][1], sc[2][2], 0,
+                                       offset[0], offset[1], offset[2], 1)
+    return v2w
+  }
+
+
+  static getWorldToVoxelMatrix(header){
+    let v2w = Toolbox.getVoxelToWorldMatrix(header)
+    let w2v = glMatrix.mat4.create()
+    glMatrix.mat4.invert(w2v, v2w)
+    return w2v
+  }
+
+
+  static getVoxelPositionFromWorldPosition(header, x, y, z){
+    let worldPos = glMatrix.vec3.fromValues(x, y, z)
+    let w2v = Toolbox.getWorldToVoxelMatrix(header)
+    let voxelPos = glMatrix.vec3.create()
+    glMatrix.vec3.transformMat4(voxelPos, worldPos, w2v)
+    return voxelPos.map(n => Math.round(n))
+  }
+
+
+  static getWorldValue(data, header, x, y, z){
+    let voxelPosition = Toolbox.getVoxelPositionFromWorldPosition(header, x, y, z)
+    return Toolbox.getValue(data, header, ...voxelPosition)
   }
 
 

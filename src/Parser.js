@@ -50,13 +50,18 @@ function parseHeader(nrrdBuffer){
     throw new Error('The NRRD header is corrupted.')
   }
 
-  let headerLines = byteArrayHeader.join('').trim().split('\n').map(l => l.trim())
+  let comments = []
+
+  let headerLines = byteArrayHeader.join('').trim().split(/\r\n|\n/).map(l => l.trim())
 
   let preMap = headerLines.slice(1)
   .filter( s => { // removing empty lines
     return s.length > 0
   })
   .filter( s => { // removing comments
+    if(s[0] === '#'){
+      comments.push(s.slice(1).trim())
+    }
     return (s[0] !== '#')
   })
   .map( s => {
@@ -68,6 +73,7 @@ function parseHeader(nrrdBuffer){
   })
 
   let nrrdHeader = {}
+
   preMap.forEach( field => {
     nrrdHeader[field.key] = field.val
   })
@@ -121,6 +127,9 @@ function parseHeader(nrrdBuffer){
   // some additional metadata that are not part of the header will be added here
   nrrdHeader.extra = {}
 
+  // adding the comments from lines starting with #
+  nrrdHeader.extra.comments = comments
+
   // having the stride can be handy.
   nrrdHeader.extra.stride = [1]
   for(let i=1; i<nrrdHeader.sizes.length; i++){
@@ -136,46 +145,63 @@ function parseHeader(nrrdBuffer){
 
 function parseData(nrrdBuffer, header, dataByteOffset){
   let dataBuffer = null
-
-  console.log(header)
-  console.log(dataByteOffset)
+  let arrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type]
+  let nbElementsFromHeader = header.sizes.reduce((prev, curr) => prev * curr)
+  let min = +Infinity
+  let max = -Infinity
+  let data = null
 
   if(header.encoding === 'raw'){
     dataBuffer = nrrdBuffer
+  } else if(header.encoding === 'ascii'){
+    console.log(dataBuffer)
+    let numbers = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, dataByteOffset))
+              .split(/\r\n|\n|\s/)
+              .map(s => s.trim())
+              .filter(s => s !== '')
+              .map(s => {
+                let numValue = parseFloat(s)
+                min = Math.min(min, numValue)
+                max = Math.max(max, numValue)
+                return numValue
+              })
+    data = new arrayType(numbers)
   } else if(header.encoding === 'gzip' || header.encoding === 'gz'){
     dataBuffer = pako.inflate(new Uint8Array(nrrdBuffer).slice(dataByteOffset)).buffer
   } else {
-    throw new Error('Only "raw" and "gzip" encoding are supported.')
+    throw new Error('Only "raw", "ascii" and "gzip" encoding are supported.')
   }
 
-  let arrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type]
-  let nbElementsFromHeader = header.sizes.reduce((prev, curr) => prev * curr)
-  let nbElementsFromBufferAndType = dataBuffer.byteLength / arrayType.BYTES_PER_ELEMENT
+  if(header.encoding === 'ascii'){
+    if(nbElementsFromHeader !== data.length){
+      throw new Error('Unconsistency in data buffer length')
+    }
+  } else {
+    let nbElementsFromBufferAndType = dataBuffer.byteLength / arrayType.BYTES_PER_ELEMENT
 
-  if(nbElementsFromHeader !== nbElementsFromBufferAndType){
-    throw new Error('Unconsistency in data buffer length')
-  }
+    if(nbElementsFromHeader !== nbElementsFromBufferAndType){
+      throw new Error('Unconsistency in data buffer length')
+    }
 
-  let data = new arrayType(nbElementsFromHeader)
-  let dataView = new DataView(dataBuffer)
-  let viewMethod = NRRD_TYPES_TO_VIEW_GET[header.type]
-  let littleEndian = header.endian === 'little' ? true : false
-  let min = +Infinity
-  let max = -Infinity
+    data = new arrayType(nbElementsFromHeader)
+    let dataView = new DataView(dataBuffer)
+    let viewMethod = NRRD_TYPES_TO_VIEW_GET[header.type]
+    let littleEndian = header.endian === 'little' ? true : false
 
-
-  for(let i=0; i<nbElementsFromHeader; i++){
-    data[i] = dataView[viewMethod](i * arrayType.BYTES_PER_ELEMENT, littleEndian)
-    min = Math.min(min, data[i])
-    max = Math.max(max, data[i])
+    for(let i=0; i<nbElementsFromHeader; i++){
+      data[i] = dataView[viewMethod](i * arrayType.BYTES_PER_ELEMENT, littleEndian)
+      min = Math.min(min, data[i])
+      max = Math.max(max, data[i])
+    }
   }
 
   header.extra.min = min
   header.extra.max = max
-
-  console.log(data)
   return data
 }
+
+
+
 
 // TODO: find a way to know the nb of componenents per voxel.
 // We could use the presence of "none" in the prop "space direction" and the prop sizes

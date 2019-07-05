@@ -4,6 +4,10 @@
   <style>
   body {
     background: deeppink;
+    /* height: 100%;
+  width: 100%; */
+  overflow: hidden;
+  margin: 0;
   }
 
   #nrrdSliceDisplay {
@@ -90,6 +94,7 @@
     }
 
     let cachedColor = {}
+    let hoveredId = null
 
     function displayNrrdSlice(sliceIndex){
       let slice = nrrdjs.Toolbox.getSliceXY(myNrrd.data, myNrrd.header, sliceIndex, {uint8: false})
@@ -126,7 +131,16 @@
           g = cachedColor[hex].g
           b = cachedColor[hex].b
           a = 255
+
+          if(hoveredId && region.id === hoveredId){
+
+            r *= 0.6
+            g *= 0.6
+            b *= 0.6
+          }
         }
+
+
 
 
         let index1D = i*4
@@ -146,17 +160,84 @@
       displayNrrdSlice(sliceIndexSlider.value)
     })
 
+
+    let lastMove = Date.now()
+    const delayMoveMs = 50
+
     canvas.addEventListener('mousemove', event =>
     {
-        let bound = canvas.getBoundingClientRect();
-        let x = (event.clientX - bound.left) / (bound.right - bound.left) * canvas.width
-        let y = (event.clientY - bound.top) / (bound.bottom - bound.top) * canvas.height
+      let now = Date.now()
+      if(now - lastMove < delayMoveMs){
+        return
+      }
+      lastMove = now
 
-        let volumeValue = nrrdjs.Toolbox.getValue(myNrrd.data, myNrrd.header, Math.round(x), Math.round(y), parseInt(sliceIndexSlider.value) )
-        let region = oneallenbrainontology.getRegionById(volumeValue[0])
-        console.log(region)
-        regionNameDiv.innerHTML = region.name
+      let bound = canvas.getBoundingClientRect();
+      let x = (event.clientX - bound.left) / (bound.right - bound.left) * canvas.width
+      let y = (event.clientY - bound.top) / (bound.bottom - bound.top) * canvas.height
+
+      let volumeValue = nrrdjs.Toolbox.getValue(myNrrd.data, myNrrd.header, Math.round(x), Math.round(y), parseInt(sliceIndexSlider.value) )
+      let region = oneallenbrainontology.getRegionById(volumeValue[0])
+      console.log(region)
+      hoveredId = region.id
+      regionNameDiv.innerHTML = region.name
+      displayNrrdSlice(sliceIndexSlider.value)
     });
+
+
+    // let timeout;
+    // window.addEventListener('wheel', function(e) {
+    //   // window.scrollTo(0, 0);
+    //
+    //   // If there's a timer, cancel it
+    //   if (timeout) {
+    //     window.cancelAnimationFrame(timeout);
+    //   }
+    //
+    //   // Setup the new requestAnimationFrame()
+    //   timeout = window.requestAnimationFrame(function () {
+    //     let newSliceIndex = parseInt(sliceIndexSlider.value) + Math.sign(e.deltaY)
+    //     sliceIndexSlider.value = newSliceIndex
+    //     console.log(sliceIndexSlider.value);
+    //     displayNrrdSlice(sliceIndexSlider.value)
+    //
+    //   });
+    // }, false)
+
+
+    // let lastWheel = Date.now()
+    // const delayWheelMs = 20
+    // window.addEventListener('wheel', function(e) {
+    //   let now = Date.now()
+    //   if(now - lastWheel < delayWheelMs){
+    //     return
+    //   }
+    //   lastWheel = now
+    //
+    //   let newSliceIndex = parseInt(sliceIndexSlider.value) + Math.sign(e.deltaY)
+    //   sliceIndexSlider.value = newSliceIndex
+    //   console.log(sliceIndexSlider.value);
+    //   displayNrrdSlice(sliceIndexSlider.value)
+    // });
+
+
+    let wheelTickCounter = 0
+    const wheelTickStep = 2
+    window.addEventListener('wheel', function(e) {
+      wheelTickCounter ++
+
+      if(wheelTickCounter % wheelTickStep !== 0)
+        return
+
+      // let newSliceIndex = parseInt(sliceIndexSlider.value) + Math.sign(e.deltaY)
+      console.log(e);
+
+      let newSliceIndex = parseInt(sliceIndexSlider.value) + (e.deltaY > 0 ? Math.ceil(e.deltaY / 10) : Math.floor(e.deltaY / 10))
+      sliceIndexSlider.value = newSliceIndex
+      console.log(sliceIndexSlider.value);
+      displayNrrdSlice(sliceIndexSlider.value)
+    });
+
 
   </script>
 

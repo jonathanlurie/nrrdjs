@@ -8070,6 +8070,28 @@
 	    return header['sizes'][header['sizes'].length-1]
 	  }
 
+
+	  static transposeSlice(slice){
+	    let data = new slice.data.constructor(slice.data.length);
+
+	    // x and y here of input
+	    for(let y=0; y<slice.height; y++){
+	      for(let x=0; x<slice.width; x++){
+	        let index1Din = y * slice.width + x;
+	        let index1Dout = x * slice.height + y;
+	        data[index1Dout] = slice.data[index1Din];
+	      }
+	    }
+
+	    return {
+	      width: slice.height,
+	      height: slice.width,
+	      ncpv: slice,
+	      data: data
+	    }
+	  }
+
+
 	  /**
 	   * Extract a slice of the XY plane in voxel coordinates. The horizontal axis of the
 	   * 2D slice is along the X axis of the volume, the vertical axis on the 2D slice is
@@ -8097,6 +8119,13 @@
 	      data: output
 	    }
 	  }
+
+
+	  static getSliceYX(data, header, sliceIndex){
+	    return Toolbox.transposeSlice(Toolbox.getSliceXY(data, header, sliceIndex))
+	  }
+
+
 
 
 	  /**
@@ -8130,6 +8159,10 @@
 	    }
 	  }
 
+
+	  static getSliceZX(data, header, sliceIndex){
+	    return Toolbox.transposeSlice(Toolbox.getSliceYZ(data, header, sliceIndex))
+	  }
 
 	  /**
 	   * Extract a slice of the YZ plane in voxel coordinates. The horizontal axis of the
@@ -8180,6 +8213,11 @@
 	  }
 
 
+	  static getSliceZY(data, header, sliceIndex){
+	    return Toolbox.transposeSlice(Toolbox.getSliceYZ(data, header, sliceIndex))
+	  }
+
+
 	  /**
 	   * Get the value at the position (x, y, z) in voxel coordinates.
 	   * @param {TypedArray} data - the volumetric data
@@ -8198,7 +8236,7 @@
 	    let ncpv = Toolbox.getNumberOfComponentPerVoxel(header);
 	    let index1D = (x * header.extra.stride[0] + y * header.extra.stride[1] + z * header.extra.stride[2]) * ncpv;
 	    // return data[index1D]
-	    return data.slice(index1D, index1D * ncpv)
+	    return data.slice(index1D, index1D + ncpv)
 	  }
 
 

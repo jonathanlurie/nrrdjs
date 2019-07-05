@@ -1,0 +1,164 @@
+<html>
+<head>
+  <title>COLOR BRAIN</title>
+  <style>
+  body {
+    background: deeppink;
+  }
+
+  #nrrdSliceDisplay {
+    position: absolute;
+    width: 70%;
+    image-rendering: pixelated;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    margin: auto;
+  }
+
+  #regionName {
+    font-family: sans-serif;
+    font-weight: 700;
+    font-size: 3em;
+    color: #FFF;
+    position: absolute;
+    bottom: 0;
+  }
+
+  #sliceIndexSlider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+    width: 300px;
+    padding: 10px;
+  }
+
+  #credits {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    color: #fff;
+    font-family: sans-serif;
+  }
+
+  #credits a {
+    text-decoration: none;
+    color: #00000077;
+  }
+  </style>
+</head>
+<body>
+  <script src="https://unpkg.com/oneallenbrainontology@0.1.5/dist/oneallenbrainontology.js"></script>
+  <!-- importing the automatically build module -->
+  <script src="../dist/nrrdjs.js"></script>
+  <canvas id="nrrdSliceDisplay" width="0" height="0"></canvas>
+  <input id='sliceIndexSlider' type="range" min="0" max="0" step="1">
+  <div id="regionName"></div>
+  <div id="credits">Data from <a href='http://help.brain-map.org/display/mousebrain/API'>Allen Institute for Brain Science</a> <br>Volume parser by <a href="https://github.com/jonathanlurie/nrrdjs">Jonathan Lurie.</a></div>
+
+  <script>
+  console.log(oneallenbrainontology)
+    let fileInput = document.getElementById('fileInput')
+    let sliceIndexSlider = document.getElementById('sliceIndexSlider')
+    let canvas = document.getElementById('nrrdSliceDisplay')
+    let regionNameDiv = document.getElementById('regionName')
+    let myNrrd = null
+
+    fetch('data/annotation_25.nrrd')
+    .then(res => {
+      return res.blob()
+    })
+    .then(res => {
+      return new Response(res).arrayBuffer()
+    })
+    .then(res => {
+      readFile(res)
+    })
+
+    function readFile( buff ){
+      myNrrd = nrrdjs.parse(buff, {})
+      let middleSlice = Math.abs(myNrrd.header.sizes[2]/2)
+      sliceIndexSlider.max = myNrrd.header.sizes[2] - 1
+      sliceIndexSlider.value = middleSlice
+      displayNrrdSlice(middleSlice)
+
+      let v2wMat = nrrdjs.Toolbox.getVoxelToWorldMatrix(myNrrd.header)
+      let w2vMat = nrrdjs.Toolbox.getWorldToVoxelMatrix(myNrrd.header)
+    }
+
+    let cachedColor = {}
+
+    function displayNrrdSlice(sliceIndex){
+      let slice = nrrdjs.Toolbox.getSliceXY(myNrrd.data, myNrrd.header, sliceIndex, {uint8: false})
+
+      canvas.width = slice.width
+      canvas.height = slice.height
+      let ctx = canvas.getContext('2d')
+
+      let canvasImageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      let canvasImageDataArray = canvasImageData.data
+
+      let span = myNrrd.header.extra.max - myNrrd.header.extra.min
+
+      for(let i=0; i<slice.data.length; i++){
+        let sliceValue = slice.data[i]
+        let region = oneallenbrainontology.getRegionById(sliceValue)
+        let r = 0
+        let g = 0
+        let b = 0
+        let a = 0
+
+        if(region){
+          let hex = region.color_hex_triplet
+
+          if(!(hex in cachedColor)){
+            cachedColor[hex] = {
+              r: parseInt(hex.substring(0,2), 16),
+              g: parseInt(hex.substring(2,4), 16),
+              b: parseInt(hex.substring(4,6), 16)
+            }
+
+          }
+          r = cachedColor[hex].r
+          g = cachedColor[hex].g
+          b = cachedColor[hex].b
+          a = 255
+        }
+
+
+        let index1D = i*4
+        canvasImageDataArray[index1D] = r
+        canvasImageDataArray[index1D + 1] = g
+        canvasImageDataArray[index1D + 2] = b
+        canvasImageDataArray[index1D + 3] = a
+      }
+      ctx.putImageData(canvasImageData, 0, 0)
+    }
+
+    sliceIndexSlider.addEventListener('input', function(e){
+      if(!myNrrd){
+        return
+      }
+
+      displayNrrdSlice(sliceIndexSlider.value)
+    })
+
+    canvas.addEventListener('mousemove', event =>
+    {
+        let bound = canvas.getBoundingClientRect();
+        let x = (event.clientX - bound.left) / (bound.right - bound.left) * canvas.width
+        let y = (event.clientY - bound.top) / (bound.bottom - bound.top) * canvas.height
+
+        let volumeValue = nrrdjs.Toolbox.getValue(myNrrd.data, myNrrd.header, Math.round(x), Math.round(y), parseInt(sliceIndexSlider.value) )
+        let region = oneallenbrainontology.getRegionById(volumeValue[0])
+        console.log(region)
+        regionNameDiv.innerHTML = region.name
+    });
+
+  </script>
+
+</body>
+</html>

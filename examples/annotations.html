@@ -1,6 +1,7 @@
 <html>
 <head>
   <title>COLOR BRAIN</title>
+  <meta name="mobile-web-app-capable" content="yes">
   <style>
   body {
     background: deeppink;
@@ -64,7 +65,7 @@
   <div id="credits">Data from <a href='http://help.brain-map.org/display/mousebrain/API'>Allen Institute for Brain Science</a> <br>Volume parser by <a href="https://github.com/jonathanlurie/nrrdjs">Jonathan Lurie.</a></div>
 
   <script>
-  console.log(oneallenbrainontology)
+  // console.log(oneallenbrainontology)
     let fileInput = document.getElementById('fileInput')
     let sliceIndexSlider = document.getElementById('sliceIndexSlider')
     let canvas = document.getElementById('nrrdSliceDisplay')
@@ -160,11 +161,21 @@
       displayNrrdSlice(sliceIndexSlider.value)
     })
 
+    let mouseDown = false
+
+    document.addEventListener('mousedown', event => {
+      mouseDown = true
+    })
+
+    document.addEventListener('mouseup', event => {
+      mouseDown = false
+    })
+
 
     let lastMove = Date.now()
     const delayMoveMs = 50
 
-    canvas.addEventListener('mousemove', event =>
+    document.addEventListener('mousemove', event =>
     {
       let now = Date.now()
       if(now - lastMove < delayMoveMs){
@@ -172,55 +183,36 @@
       }
       lastMove = now
 
+
+
       let bound = canvas.getBoundingClientRect();
       let x = (event.clientX - bound.left) / (bound.right - bound.left) * canvas.width
       let y = (event.clientY - bound.top) / (bound.bottom - bound.top) * canvas.height
 
       let volumeValue = nrrdjs.Toolbox.getValue(myNrrd.data, myNrrd.header, Math.round(x), Math.round(y), parseInt(sliceIndexSlider.value) )
       let region = oneallenbrainontology.getRegionById(volumeValue[0])
-      console.log(region)
-      hoveredId = region.id
-      regionNameDiv.innerHTML = region.name
-      displayNrrdSlice(sliceIndexSlider.value)
+
+      if(region){
+        hoveredId = region.id
+        regionNameDiv.innerHTML = region.name
+        displayNrrdSlice(sliceIndexSlider.value)
+      } else {
+        hoveredId = null
+      }
+
+
+      // console.log( event.movementY )
+      if(mouseDown){
+        let newSliceIndex = parseInt(sliceIndexSlider.value) + event.movementY
+        sliceIndexSlider.value = newSliceIndex
+        // console.log(sliceIndexSlider.value);
+        displayNrrdSlice(sliceIndexSlider.value)
+      }
     });
 
 
-    // let timeout;
-    // window.addEventListener('wheel', function(e) {
-    //   // window.scrollTo(0, 0);
-    //
-    //   // If there's a timer, cancel it
-    //   if (timeout) {
-    //     window.cancelAnimationFrame(timeout);
-    //   }
-    //
-    //   // Setup the new requestAnimationFrame()
-    //   timeout = window.requestAnimationFrame(function () {
-    //     let newSliceIndex = parseInt(sliceIndexSlider.value) + Math.sign(e.deltaY)
-    //     sliceIndexSlider.value = newSliceIndex
-    //     console.log(sliceIndexSlider.value);
-    //     displayNrrdSlice(sliceIndexSlider.value)
-    //
-    //   });
-    // }, false)
 
-
-    // let lastWheel = Date.now()
-    // const delayWheelMs = 20
-    // window.addEventListener('wheel', function(e) {
-    //   let now = Date.now()
-    //   if(now - lastWheel < delayWheelMs){
-    //     return
-    //   }
-    //   lastWheel = now
-    //
-    //   let newSliceIndex = parseInt(sliceIndexSlider.value) + Math.sign(e.deltaY)
-    //   sliceIndexSlider.value = newSliceIndex
-    //   console.log(sliceIndexSlider.value);
-    //   displayNrrdSlice(sliceIndexSlider.value)
-    // });
-
-
+    // scrolling
     let wheelTickCounter = 0
     const wheelTickStep = 2
     window.addEventListener('wheel', function(e) {
@@ -229,12 +221,9 @@
       if(wheelTickCounter % wheelTickStep !== 0)
         return
 
-      // let newSliceIndex = parseInt(sliceIndexSlider.value) + Math.sign(e.deltaY)
-      console.log(e);
-
       let newSliceIndex = parseInt(sliceIndexSlider.value) + (e.deltaY > 0 ? Math.ceil(e.deltaY / 10) : Math.floor(e.deltaY / 10))
       sliceIndexSlider.value = newSliceIndex
-      console.log(sliceIndexSlider.value);
+      // console.log(sliceIndexSlider.value);
       displayNrrdSlice(sliceIndexSlider.value)
     });
 

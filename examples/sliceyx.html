@@ -38,7 +38,7 @@
 
     function readFile( buff ){
       myNrrd = nrrdjs.parse(buff, {})
-      let middleSlice = Math.abs(myNrrd.header.sizes[2]/2)
+      let middleSlice = ~~Math.abs(myNrrd.header.sizes[2]/2)
       sliceIndexSlider.max = myNrrd.header.sizes[2] - 1
       sliceIndexSlider.value = middleSlice
       displayNrrdSlice(middleSlice)

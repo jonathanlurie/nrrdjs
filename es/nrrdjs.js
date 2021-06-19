@@ -392,7 +392,7 @@ function parseData(nrrdBuffer, header, dataByteOffset){
   let isTextEncoded = header.encoding === 'ascii' || header.encoding === 'txt' || header.encoding === 'text';
 
   if(header.encoding === 'raw'){
-    dataBuffer = nrrdBuffer;
+    dataBuffer = nrrdBuffer.slice(dataByteOffset);
   } else if(isTextEncoded){
     let numbers = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, dataByteOffset))
               .split(/\r\n|\n|\s/)

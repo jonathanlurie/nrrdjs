@@ -1,0 +1,135 @@
+<html>
+<head>
+  <title>Test</title>
+  <style>
+    #nrrdSliceDisplay {
+      height: 90%;
+    }
+
+    #output-text {
+      height: 10em;
+      width: 80%;
+    }
+  </style>
+</head>
+<body>
+  <!-- importing the automatically build module -->
+  <script src="../dist/nrrdjs.js"></script>
+
+  <!-- The minified version is also accessible -->
+  <!-- <script src="../dist/edfdecoder.umd.min.js"></script> -->
+  Open NRRD file <input type="file" id="fileInput">
+  <textarea id="output-text"></textarea>
+  
+  <canvas id="nrrdSliceDisplay" width="0" height="0"></canvas>
+  
+  
+
+  <script>
+    const outputText = document.getElementById('output-text')
+    let fileInput = document.getElementById('fileInput')
+    let myNrrd = null
+
+
+    // event listener of the file dialog, it then triggers the file decoding
+    fileInput.addEventListener('change', function(e) {
+      let files = e.target.files
+      let reader = new FileReader()
+      if( !files.length ){
+        return
+      }
+      reader.onloadend = function(event) {
+        let buffer = event.target.result
+        readFile(buffer)
+      }
+      reader.readAsArrayBuffer( files[0] )
+  	})
+
+    function readFile( buff ){
+      myNrrd = nrrdjs.parse(buff, {})
+      console.log(myNrrd)
+      let middleSlice = ~~Math.abs(myNrrd.header.sizes[2]/2)
+      displayMip()
+
+      let v2wMat = nrrdjs.Toolbox.getVoxelToWorldMatrix(myNrrd.header)
+      console.log('v2w', v2wMat)
+
+      let w2vMat = nrrdjs.Toolbox.getWorldToVoxelMatrix(myNrrd.header)
+      console.log('w2v', w2vMat)
+
+      console.log('Components per voxel:', nrrdjs.Toolbox.getNumberOfComponentPerVoxel(myNrrd.header))
+      console.log('Number of time samples:', nrrdjs.Toolbox.getNumberOfTimeSamples(myNrrd.header))
+
+    }
+
+    function displayMip() {
+      const header = myNrrd.header
+      const volData = myNrrd.data
+      const xSize = header.sizes[0]
+      const ySize = header.sizes[1]
+      const zSize = header.sizes[2]
+      const xStride = header.extra.stride[0]
+      const yStride = header.extra.stride[1]
+      const zStride = header.extra.stride[2]
+      const ncpv = nrrdjs.Toolbox.getNumberOfComponentPerVoxel(header)
+      // getting a sample slice (so we don't bother looking)
+      const slice = new volData.constructor(xSize * ySize)
+
+      let index1DInImage = 0
+
+      let minVal = +Infinity
+      let maxVal = -Infinity
+
+      const t0mip = performance.now()
+      for (let y = 0; y < ySize; y += 1) {
+        const yJump = y * yStride
+        for (let x = 0; x < xSize; x += 1) {
+          const xJump = x * xStride
+          let maxAlongZ = -Infinity
+          for (let z = 0; z < zSize; z += 1) {
+            const zJump = z * zStride
+            const index1DinVolume = ( xJump + yJump + zJump) * ncpv
+            const value =  volData[index1DinVolume]
+            if (value > maxAlongZ) {
+              maxAlongZ = value
+            }
+          }
+          
+          // min max for the whole final image
+          minVal = Math.min(maxAlongZ, minVal)
+          maxVal = Math.max(maxAlongZ, maxVal)
+
+          slice[index1DInImage] = maxAlongZ
+          index1DInImage ++
+        }
+      }
+      const t1mip = performance.now()
+      
+      const t0mipToCanvas = performance.now()
+      // create the canvas
+      const canvas = document.getElementById('nrrdSliceDisplay')
+      canvas.width = xSize
+      canvas.height = ySize
+      const ctx = canvas.getContext('2d')
+      const canvasImageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const canvasImageDataArray = canvasImageData.data
+      const delta = maxVal - minVal
+
+      for (let i = 0; i < slice.length; i += 1) {
+        const val = ((slice[i] - minVal) / delta) * 255
+
+        canvasImageDataArray[i * 4] = val
+        canvasImageDataArray[i * 4 + 1] = val
+        canvasImageDataArray[i * 4 + 2] = val
+        canvasImageDataArray[i * 4 + 3] = 255
+      }
+      ctx.putImageData(canvasImageData, 0, 0)
+      const t1mipToCanvas = performance.now()
+
+      outputText.value = `Compute hortogonal MIP: ${t1mip - t0mip}ms\nPut to canvas: ${t1mipToCanvas - t0mipToCanvas}ms\n`
+    }
+
+  </script>
+
+</body>
+</html>

@@ -15,7 +15,7 @@ import {
  * @param {boolean} options.headerOnly - Parses only the header if true, parses header and data if false (default: false)
  * @return {Object} NRRD header and data such as {header: Object, data: TypedArray }
  */
-export default function parse(nrrdBuffer, options){
+export default function parse(nrrdBuffer, options = {}){
   let magicControl = 'NRRD000'
   let magicTest = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, 0, magicControl.length))
 

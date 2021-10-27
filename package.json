@@ -1,6 +1,6 @@
 {
   "name": "@jonathanlurie/nrrdjs",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Pure Javascript NRRD parser for browser and Node",
   "repository": "jonathanlurie/nrrdjs",
   "main": "lib/nrrdjs.js",
@@ -27,6 +27,7 @@
     "rollup-plugin-node-globals": "^1.4.0",
     "rollup-plugin-node-resolve": "^3.4.0",
     "rollup-plugin-terser": "^2.0.2",
+    "rollup-plugin-web-worker-loader": "^1.6.1",
     "rollup-plugin-webworkify": "0.0.4",
     "serve": "^10.0.1"
   },

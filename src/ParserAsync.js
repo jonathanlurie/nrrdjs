@@ -1,10 +1,28 @@
 import pako from 'pako'
+
+import ParseDataWorker from 'worker#./parseData.worker.js'
+
 import {
   NRRD_TYPES_TO_TYPEDARRAY,
   NRRD_TYPES_TO_VIEW_GET,
   SPACE_TO_SPACEDIMENSIONS,
-  KIND_TO_SIZE
+  KIND_TO_SIZE,
 } from './constants'
+
+
+function inflateAsync(buffer) {
+  return new Promise((resolve, reject) => {
+    const w = new ParseDataWorker()
+    w.addEventListener('message', (e) => {
+      if (e.data instanceof Error) {
+        reject(e.data)
+      } else {
+        resolve(e.data)
+      }
+    })
+    w.postMessage(buffer, [buffer])
+  })
+}
 
 
 /**
@@ -15,7 +33,7 @@ import {
  * @param {boolean} options.headerOnly - Parses only the header if true, parses header and data if false (default: false)
  * @return {Object} NRRD header and data such as {header: Object, data: TypedArray }
  */
-export default function parse(nrrdBuffer, options = {}){
+export default async function parseAsync(nrrdBuffer, options = {}){
   let magicControl = 'NRRD000'
   let magicTest = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, 0, magicControl.length))
 
@@ -29,7 +47,7 @@ export default function parse(nrrdBuffer, options = {}){
     return {header: header, data: null}
   }
 
-  let data = parseData(nrrdBuffer, header, dataByteOffset)
+  let data = await parseData(nrrdBuffer, header, dataByteOffset)
   return {header: header, data: data}
 }
 
@@ -234,54 +252,54 @@ function parseHeader(nrrdBuffer){
  * @private
  * Parses the data
  */
-function parseData(nrrdBuffer, header, dataByteOffset){
+async function parseData(nrrdBuffer, header, dataByteOffset) {
   let dataBuffer = null
-  let arrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type]
-  let nbElementsFromHeader = header.sizes.reduce((prev, curr) => prev * curr)
+  const ArrayType = NRRD_TYPES_TO_TYPEDARRAY[header.type]
+  const nbElementsFromHeader = header.sizes.reduce((prev, curr) => prev * curr)
   let min = +Infinity
   let max = -Infinity
   let data = null
 
-  let isTextEncoded = header.encoding === 'ascii' || header.encoding === 'txt' || header.encoding === 'text'
+  const isTextEncoded = header.encoding === 'ascii' || header.encoding === 'txt' || header.encoding === 'text'
 
-  if(header.encoding === 'raw'){
+  if (header.encoding === 'raw') {
     dataBuffer = nrrdBuffer.slice(dataByteOffset)
-  } else if(isTextEncoded){
-    let numbers = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, dataByteOffset))
-              .split(/\r\n|\n|\s/)
-              .map(s => s.trim())
-              .filter(s => s !== '')
-              .map(s => {
-                let numValue = parseFloat(s)
-                min = Math.min(min, numValue)
-                max = Math.max(max, numValue)
-                return numValue
-              })
-    data = new arrayType(numbers)
-  } else if(header.encoding === 'gzip' || header.encoding === 'gz'){
-    dataBuffer = pako.inflate(nrrdBuffer.slice(dataByteOffset)).buffer
+  } else if (isTextEncoded) {
+    const numbers = String.fromCharCode.apply(null, new Uint8Array(nrrdBuffer, dataByteOffset))
+      .split(/\r\n|\n|\s/)
+      .map(s => s.trim())
+      .filter(s => s !== '')
+      .map((s) => {
+        const numValue = parseFloat(s)
+        min = Math.min(min, numValue)
+        max = Math.max(max, numValue)
+        return numValue
+      })
+    data = new ArrayType(numbers)
+  } else if (header.encoding === 'gzip' || header.encoding === 'gz') {
+    dataBuffer = await inflateAsync(nrrdBuffer.slice(dataByteOffset, 1000))
   } else {
     throw new Error('Only "raw", "ascii" and "gzip" encoding are supported.')
   }
 
-  if(isTextEncoded){
-    if(nbElementsFromHeader !== data.length){
+  if (isTextEncoded) {
+    if (nbElementsFromHeader !== data.length) {
       throw new Error('Unconsistency in data buffer length')
     }
   } else {
-    let nbElementsFromBufferAndType = dataBuffer.byteLength / arrayType.BYTES_PER_ELEMENT
+    const nbElementsFromBufferAndType = dataBuffer.byteLength / ArrayType.BYTES_PER_ELEMENT
 
-    if(nbElementsFromHeader !== nbElementsFromBufferAndType){
+    if (nbElementsFromHeader !== nbElementsFromBufferAndType) {
       throw new Error('Unconsistency in data buffer length')
     }
 
-    data = new arrayType(nbElementsFromHeader)
-    let dataView = new DataView(dataBuffer)
-    let viewMethod = NRRD_TYPES_TO_VIEW_GET[header.type]
-    let littleEndian = header.endian === 'little' ? true : false
+    data = new ArrayType(nbElementsFromHeader)
+    const dataView = new DataView(dataBuffer)
+    const viewMethod = NRRD_TYPES_TO_VIEW_GET[header.type]
+    const littleEndian = header.endian === 'little'
 
-    for(let i=0; i<nbElementsFromHeader; i++){
-      data[i] = dataView[viewMethod](i * arrayType.BYTES_PER_ELEMENT, littleEndian)
+    for (let i = 0; i < nbElementsFromHeader; i += 1) {
+      data[i] = dataView[viewMethod](i * ArrayType.BYTES_PER_ELEMENT, littleEndian)
       min = Math.min(min, data[i])
       max = Math.max(max, data[i])
     }
@@ -291,8 +309,6 @@ function parseData(nrrdBuffer, header, dataByteOffset){
   header.extra.max = max
   return data
 }
-
-
 
 
 // TODO: find a way to know the nb of componenents per voxel.

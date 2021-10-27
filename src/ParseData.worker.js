@@ -1,5 +1,3 @@
-// import pako from 'pako'
-
 const adler32 = (adler, buf, len, pos) => {
   let s1 = (adler & 0xffff) |0,
       s2 = ((adler >>> 16) & 0xffff) |0,
@@ -3123,6 +3121,8 @@ function inflate(input, options) {
 }
 
 
+
+
 /**
  * inflateRaw(data[, options]) -> Uint8Array|String
  * - data (Uint8Array): input data to decompress.
@@ -3151,7 +3151,6 @@ function inflateRaw(input, options) {
 function ParseDataWorker(self) {
   self.addEventListener('message', (e) => {
     const data = e.data
-
     try {
       const out = inflate(data).buffer
       self.postMessage(out, [out])

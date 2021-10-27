@@ -3,6 +3,8 @@
 [EXAMPLE](https://github.com/jonathanlurie/nrrdjs/blob/master/examples/slicexy.html)  
 [DOC](https://github.com/jonathanlurie/nrrdjs/blob/master/documentation.md)
 
+Use `nrrdjs.parse(...)` or `await nrrdjs.parseAsync(...)` for async/webworker.
+
 The encoding supported are: raw, ascii and gzip.
 
 In addition to the parser, a toolbox is available under `nrrdjs.Toolbox`. There, some handy tools are provided:

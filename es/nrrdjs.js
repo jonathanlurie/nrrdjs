@@ -93,9 +93,7 @@ function createSourceObject(e) {
 }
 
 var ParseDataWorker = workerCtor('worker#./parseData.worker.js', function() { return (function(e,r){return e(r={exports:{}},r.exports),r.exports})(function (module, exports) {
-  // import pako from 'pako'
-
-const adler32 = (adler, buf, len, pos) => {
+  const adler32 = (adler, buf, len, pos) => {
   let s1 = (adler & 0xffff) |0,
       s2 = ((adler >>> 16) & 0xffff) |0,
       n = 0;
@@ -3231,7 +3229,6 @@ function inflate(input, options) {
 function ParseDataWorker(self) {
   self.addEventListener('message', (e) => {
     const data = e.data;
-
     try {
       const out = inflate(data).buffer;
       self.postMessage(out, [out]);
@@ -3667,7 +3664,7 @@ async function parseData(nrrdBuffer, header, dataByteOffset) {
       });
     data = new ArrayType(numbers);
   } else if (header.encoding === 'gzip' || header.encoding === 'gz') {
-    dataBuffer = await inflateAsync(nrrdBuffer.slice(dataByteOffset, 1000));
+    dataBuffer = await inflateAsync(nrrdBuffer.slice(dataByteOffset));
   } else {
     throw new Error('Only "raw", "ascii" and "gzip" encoding are supported.')
   }
@@ -3697,7 +3694,7 @@ async function parseData(nrrdBuffer, header, dataByteOffset) {
 
   header.extra.min = min;
   header.extra.max = max;
-  return data
+  return data 
 }
 
 

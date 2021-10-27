@@ -277,7 +277,7 @@ async function parseData(nrrdBuffer, header, dataByteOffset) {
       })
     data = new ArrayType(numbers)
   } else if (header.encoding === 'gzip' || header.encoding === 'gz') {
-    dataBuffer = await inflateAsync(nrrdBuffer.slice(dataByteOffset, 1000))
+    dataBuffer = await inflateAsync(nrrdBuffer.slice(dataByteOffset))
   } else {
     throw new Error('Only "raw", "ascii" and "gzip" encoding are supported.')
   }
@@ -307,7 +307,7 @@ async function parseData(nrrdBuffer, header, dataByteOffset) {
 
   header.extra.min = min
   header.extra.max = max
-  return data
+  return data 
 }
 
 

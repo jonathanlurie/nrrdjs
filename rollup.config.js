@@ -16,7 +16,7 @@ if(~packageName.indexOf('/')){
 const configurations = [
   // UMD
   {
-    input: pkg.entry,
+    input: 'src/indexBrowser.js',
     output: {
       file: pkg.unpkg,
       name: packageName,
@@ -34,7 +34,7 @@ const configurations = [
 
   // ESMODULE
   {
-    input: pkg.entry,
+    input: 'src/indexBrowser.js',
     output: {
       file: pkg.module,
       name: packageName,
@@ -56,7 +56,7 @@ const configurations = [
 
   // CJS
   {
-    input: pkg.entry,
+    input: 'src/indexNode.js',
     output: {
       file: pkg.main,
       name: packageName,
@@ -72,7 +72,7 @@ const configurations = [
       commonjs({ include: 'node_modules/**' }),
       globals(),
       builtins(),
-      webworkify({ pattern: '**/*.worker.js' }),
+      // webworkify({ pattern: '**/*.worker.js' }),
     ],
   },
 
@@ -83,7 +83,7 @@ const configurations = [
 if (process.env.NODE_ENV === 'production') {
   configurations.push(
     {
-      input: pkg.entry,
+      input: 'src/indexBrowser.js',
       output: {
         file: pkg.unpkg.replace('.js', '.min.js'),
         name: packageName,

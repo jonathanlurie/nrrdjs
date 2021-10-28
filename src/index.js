@@ -1,10 +1,3 @@
-import parseAsync from './ParserAsync'
-import parse from './Parser'
-
-import Toolbox from './Toolbox'
-
-export default ({
-  parse,
-  Toolbox,
-  parseAsync,
-})
+export { default as parse } from './Parser'
+export { default as parseAsync } from './ParserAsync'
+export { default as Toolbox } from './Toolbox'

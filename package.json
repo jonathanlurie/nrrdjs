@@ -1,6 +1,6 @@
 {
   "name": "@jonathanlurie/nrrdjs",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Pure Javascript NRRD parser for browser and Node",
   "repository": "jonathanlurie/nrrdjs",
   "main": "lib/nrrdjs.js",

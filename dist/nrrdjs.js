@@ -7939,8 +7939,12 @@
      * @return {number}
      */
     static getNumberOfComponentPerVoxel(header){
-      if(header['dimension'] === header['space dimension'] ||
-         header['space directions'][0] !== null){
+      try {
+        if(header['dimension'] === header['space dimension'] ||
+          header['space directions'][0] !== null){
+          return 1
+        }
+      } catch (e) {
         return 1
       }
 
@@ -7957,8 +7961,12 @@
      * @return {number}
      */
     static getNumberOfTimeSamples(header){
-      if(header['dimension'] === header['space dimension'] ||
-         header['space directions'][header['space directions'].length-1] !== null){
+      try {
+        if(header['dimension'] === header['space dimension'] ||
+          header['space directions'][header['space directions'].length-1] !== null){
+          return 1
+        }
+      } catch (e) {
         return 1
       }
 

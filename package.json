@@ -28,7 +28,7 @@
     "rollup-plugin-node-resolve": "^3.4.0",
     "rollup-plugin-terser": "^2.0.2",
     "rollup-plugin-webworkify": "0.0.4",
-    "serve": "^10.0.1"
+    "serve": "^14.0.1"
   },
   "eslintConfig": {
     "extends": "eslint-config-airbnb-base",
